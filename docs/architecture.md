@@ -39,6 +39,7 @@ The backend should fail gracefully, not silently fall back.
 - Execution timeout returns `analysis_timeout`.
 - Failed repair attempts return `analysis_execution_failed`.
 - Missing dataset returns `dataset_not_found`.
+- Malformed or incomplete API requests return `request_validation_failed`.
 
 Each failure is returned as:
 
