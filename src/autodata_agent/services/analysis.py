@@ -7,6 +7,7 @@ from autodata_agent.core.json_utils import extract_json_object
 from autodata_agent.core.schemas import (
     AnalysisRequest,
     AnalysisResponse,
+    ExecutionResult,
     GeneratedAnalysisCode,
     Narrative,
 )
@@ -65,17 +66,18 @@ class AnalysisService:
             history=[self._history_summary(record.response) for record in history],
         )
 
-        execution = self.executor.execute(stored.dataframe, generated.code)
+        profile = stored.profile.model_dump(mode="json")
+        execution = self._execute_generated(stored.dataframe, generated, profile)
         attempts = 1
         while not execution.success and attempts <= self.max_repair_attempts:
             generated = self._repair_code(
                 question=request.question,
-                profile=stored.profile.model_dump(mode="json"),
+                profile=profile,
                 failed_code=generated.code,
                 error=execution.error or "Unknown execution error.",
             )
             attempts += 1
-            execution = self.executor.execute(stored.dataframe, generated.code)
+            execution = self._execute_generated(stored.dataframe, generated, profile)
         execution.attempts = attempts
 
         if not execution.success:
@@ -102,6 +104,44 @@ class AnalysisService:
         )
         self.sessions.append(session_id, request.dataset_id, request.question, response)
         return response
+
+    def _execute_generated(
+        self,
+        df,
+        generated: GeneratedAnalysisCode,
+        profile: dict,
+    ) -> ExecutionResult:
+        plan_error = self._validate_generated_plan(generated, profile)
+        if plan_error is not None:
+            return plan_error
+        try:
+            return self.executor.execute(df, generated.code)
+        except ExecutionAppError as exc:
+            return ExecutionResult(
+                success=False,
+                error=f"{exc.code}: {exc.message}",
+            )
+
+    def _validate_generated_plan(
+        self,
+        generated: GeneratedAnalysisCode,
+        profile: dict,
+    ) -> ExecutionResult | None:
+        available_columns = {str(column["name"]) for column in profile.get("columns", [])}
+        missing = [
+            column
+            for column in generated.plan.required_columns
+            if column not in available_columns
+        ]
+        if missing:
+            return ExecutionResult(
+                success=False,
+                error=(
+                    "Generated plan referenced columns that do not exist in the dataset: "
+                    f"{missing}. Available columns: {sorted(available_columns)}"
+                ),
+            )
+        return None
 
     def _generate_code(
         self,
