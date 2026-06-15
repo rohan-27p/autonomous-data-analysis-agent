@@ -101,6 +101,19 @@ ruff check .
 
 The tests use fake LLM clients where needed. Production analysis does not silently fall back when Ollama is missing; it returns a structured service error.
 
+## Publishing With GitHub Desktop
+
+This workspace is already initialized as a git repository on `main` with logical commits.
+
+To publish the remote repository:
+
+1. Open GitHub Desktop.
+2. Add/open this local repository:
+   `C:\Users\lostdecimal27\Documents\Codex\2026-06-15\gen-ai-project-agent`
+3. Click **Publish repository**.
+4. Recommended repository name: `autonomous-data-analysis-agent-backend`.
+5. Keep the repo private until submission details are final, unless your course requires public access.
+
 ## Demo Data
 
 Generated files:
@@ -116,4 +129,3 @@ node scripts/build_demo_workbook.mjs
 ```
 
 The workbook includes a dashboard, order-level data, summary tables, a data dictionary, demo questions, and QA checks.
-
