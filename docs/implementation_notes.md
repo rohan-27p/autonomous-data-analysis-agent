@@ -17,7 +17,9 @@ Built a backend-only Python service. No frontend is included yet. FastAPI is use
 5. Use dependency injection so tests can use fake LLM responses while production uses Ollama Cloud.
 6. Store session history in SQLite instead of only memory.
 7. Persist ingested datasets and profiles under runtime storage for process restart recovery.
-8. Generate demo data in repeatable scripts.
+8. Validate generated plan columns before executing generated code.
+9. Convert safe execution failures into repair-loop inputs instead of raw crashes.
+10. Generate demo data in repeatable scripts.
 
 ### Ollama Notes
 
@@ -55,9 +57,13 @@ Tests currently cover:
 
 - CSV ingestion and profile creation.
 - Excel and JSON ingestion.
+- SQL SELECT ingestion.
+- Dataset rehydration from persisted runtime storage.
 - Successful sandbox execution.
 - Unsafe generated code rejection.
 - Analysis repair loop using a fake LLM.
+- Unsafe generated code repair without execution.
+- Graceful failure after unknown-column repair attempts are exhausted.
 - Health endpoint.
 - Graceful missing Ollama key error.
 

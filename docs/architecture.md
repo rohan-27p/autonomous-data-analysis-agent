@@ -21,10 +21,11 @@
 4. User submits a business question.
 5. Analysis service sends question, profile, and recent history to Ollama.
 6. Ollama returns JSON containing an analysis plan and Python code.
-7. Executor validates code for blocked operations.
-8. Executor runs code in a separate subprocess with timeout.
-9. If execution fails, the traceback and code are sent to the repair prompt.
-10. Successful output returns `result_df`, chart spec, narrative, and session history.
+7. Analysis service validates that required plan columns exist in the profiled dataset.
+8. Executor validates code for blocked operations.
+9. Executor runs code in a separate subprocess with timeout.
+10. If validation or execution fails, the error and code are sent to the repair prompt.
+11. Successful output returns `result_df`, chart spec, narrative, and session history.
 
 ## Failure Policy
 
@@ -34,6 +35,7 @@ The backend should fail gracefully, not silently fall back.
 - Invalid model JSON returns `invalid_llm_json`.
 - Invalid generated schema returns `invalid_generated_analysis`.
 - Unsafe generated code returns `unsafe_generated_code`.
+- Generated plans that reference unknown columns are repaired before execution.
 - Execution timeout returns `analysis_timeout`.
 - Failed repair attempts return `analysis_execution_failed`.
 - Missing dataset returns `dataset_not_found`.
@@ -74,4 +76,3 @@ Rationale:
 - Recent listing update at time of implementation.
 
 Alternate: `glm-5.1:cloud`, because Ollama describes it as a flagship agentic engineering model with strong coding capabilities.
-
