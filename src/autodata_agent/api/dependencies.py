@@ -13,7 +13,11 @@ from autodata_agent.storage.session_store import SessionStore
 @lru_cache
 def get_dataset_store() -> DatasetStore:
     settings = get_settings()
-    return DatasetStore(settings.upload_dir, settings.max_upload_bytes)
+    return DatasetStore(
+        settings.upload_dir,
+        settings.max_upload_bytes,
+        settings.storage_dir / "datasets",
+    )
 
 
 @lru_cache
@@ -35,4 +39,3 @@ def get_analysis_service() -> AnalysisService:
 
 def settings_dependency() -> Settings:
     return get_settings()
-
