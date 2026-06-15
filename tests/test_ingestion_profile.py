@@ -38,3 +38,15 @@ def test_excel_and_json_ingestion(tmp_path):
     assert json_info.source_type == DataSourceType.JSON
     assert excel_info.profile.row_count == json_info.profile.row_count == 2
 
+
+def test_dataset_store_rehydrates_from_disk(tmp_path):
+    upload_dir = tmp_path / "uploads"
+    dataset_dir = tmp_path / "datasets"
+    store = DatasetStore(upload_dir, max_upload_bytes=5_000_000, dataset_dir=dataset_dir)
+    info = store.put_file("orders.csv", b"category,sales\nA,100\nB,50\n")
+
+    restarted_store = DatasetStore(upload_dir, max_upload_bytes=5_000_000, dataset_dir=dataset_dir)
+    restored = restarted_store.get(info.dataset_id)
+
+    assert restored.profile.row_count == 2
+    assert list(restored.dataframe.columns) == ["category", "sales"]
