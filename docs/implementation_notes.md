@@ -16,7 +16,8 @@ Built a backend-only Python service. No frontend is included yet. FastAPI is use
 4. Do not silently fall back if Ollama is unavailable.
 5. Use dependency injection so tests can use fake LLM responses while production uses Ollama Cloud.
 6. Store session history in SQLite instead of only memory.
-7. Generate demo data in repeatable scripts.
+7. Persist ingested datasets and profiles under runtime storage for process restart recovery.
+8. Generate demo data in repeatable scripts.
 
 ### Ollama Notes
 
@@ -62,16 +63,15 @@ Tests currently cover:
 
 ### Known Limits
 
-- Dataset storage is in memory for active DataFrames. Original uploads are saved to disk, but rehydrating datasets after app restart is not implemented yet.
+- Dataset persistence uses CSV plus profile JSON. This is reliable for demo and tabular business data, but richer type preservation can be improved with parquet later.
 - The sandbox is a controlled subprocess runner, not a hardened container.
 - The LLM is expected to produce valid JSON. Invalid JSON is handled gracefully, but not auto-repaired yet.
 - Chart output is an API spec, not a rendered image. The future frontend can render the spec with Plotly.
 
 ### Next Implementation Tasks
 
-1. Persist DataFrames to parquet or SQLite so datasets survive restart.
+1. Upgrade persisted dataset format from CSV to parquet or SQLite for stronger type preservation.
 2. Add auth or API key protection if deployed publicly.
 3. Add a `/reports/export` endpoint for HTML/PDF summaries.
 4. Add richer chart specs for Plotly rendering.
 5. Add integration tests against a real Ollama key when available.
-

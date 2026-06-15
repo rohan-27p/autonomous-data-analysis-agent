@@ -9,7 +9,12 @@ import pandas as pd
 from sqlalchemy import create_engine, text
 
 from autodata_agent.core.errors import ValidationAppError
-from autodata_agent.core.schemas import DatasetInfo, DataSourceType, SQLIngestRequest
+from autodata_agent.core.schemas import (
+    DatasetInfo,
+    DatasetProfile,
+    DataSourceType,
+    SQLIngestRequest,
+)
 from autodata_agent.services.profiling import build_profile
 
 
@@ -19,14 +24,22 @@ class StoredDataset:
     dataframe: pd.DataFrame
     source_name: str
     source_type: DataSourceType
-    profile: object
+    profile: DatasetProfile
 
 
 class DatasetStore:
-    def __init__(self, upload_dir: Path, max_upload_bytes: int) -> None:
+    def __init__(
+        self,
+        upload_dir: Path,
+        max_upload_bytes: int,
+        dataset_dir: Path | None = None,
+    ) -> None:
         self.upload_dir = upload_dir
+        self.dataset_dir = dataset_dir or upload_dir.parent / "datasets"
         self.max_upload_bytes = max_upload_bytes
         self._datasets: dict[str, StoredDataset] = {}
+        self.upload_dir.mkdir(parents=True, exist_ok=True)
+        self.dataset_dir.mkdir(parents=True, exist_ok=True)
 
     def put_file(self, filename: str, content: bytes) -> DatasetInfo:
         if not content:
@@ -83,9 +96,13 @@ class DatasetStore:
         try:
             return self._datasets[dataset_id]
         except KeyError as exc:
+            rehydrated = self._rehydrate(dataset_id)
+            if rehydrated is not None:
+                self._datasets[dataset_id] = rehydrated
+                return rehydrated
             raise ValidationAppError(
                 "dataset_not_found",
-                "Dataset was not found in the current backend session.",
+                "Dataset was not found in backend storage.",
                 status_code=404,
                 details={"dataset_id": dataset_id},
             ) from exc
@@ -116,11 +133,33 @@ class DatasetStore:
             source_type,
             profile,
         )
+        self._persist(dataset_id, df, profile)
         return DatasetInfo(
             dataset_id=dataset_id,
             source_name=source_name,
             source_type=source_type,
             row_count=profile.row_count,
             column_count=profile.column_count,
+            profile=profile,
+        )
+
+    def _persist(self, dataset_id: str, df: pd.DataFrame, profile: DatasetProfile) -> None:
+        dataset_path = self.dataset_dir / f"{dataset_id}.csv"
+        profile_path = self.dataset_dir / f"{dataset_id}.profile.json"
+        df.to_csv(dataset_path, index=False)
+        profile_path.write_text(profile.model_dump_json(indent=2), encoding="utf-8")
+
+    def _rehydrate(self, dataset_id: str) -> StoredDataset | None:
+        dataset_path = self.dataset_dir / f"{dataset_id}.csv"
+        profile_path = self.dataset_dir / f"{dataset_id}.profile.json"
+        if not dataset_path.exists() or not profile_path.exists():
+            return None
+        df = pd.read_csv(dataset_path)
+        profile = DatasetProfile.model_validate_json(profile_path.read_text(encoding="utf-8"))
+        return StoredDataset(
+            dataset_id=dataset_id,
+            dataframe=df,
+            source_name=profile.source_name,
+            source_type=profile.source_type,
             profile=profile,
         )
