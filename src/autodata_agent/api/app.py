@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from autodata_agent.api.routes import router
 from autodata_agent.core.errors import AppError
+
+
+def _error_payload(code: str, message: str, details: dict | list | None = None) -> dict:
+    return {"error": {"code": code, "message": message, "details": details or {}}}
 
 
 def create_app() -> FastAPI:
@@ -22,7 +27,18 @@ def create_app() -> FastAPI:
     async def app_error_handler(_: Request, exc: AppError) -> JSONResponse:
         return JSONResponse(
             status_code=exc.status_code,
-            content={"error": {"code": exc.code, "message": exc.message, "details": exc.details}},
+            content=_error_payload(exc.code, exc.message, exc.details),
+        )
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error_handler(_: Request, exc: RequestValidationError) -> JSONResponse:
+        return JSONResponse(
+            status_code=422,
+            content=_error_payload(
+                "request_validation_failed",
+                "Request validation failed.",
+                exc.errors(),
+            ),
         )
 
     @app.exception_handler(Exception)
