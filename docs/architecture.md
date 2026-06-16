@@ -67,13 +67,13 @@ For production, replace this with container isolation or a restricted worker ser
 
 ## Model Choice
 
-Default model: `kimi-k2.7-code:cloud`
+Default model for direct Ollama Cloud API in this repo: `qwen3-coder:480b`
 
 Rationale:
 
 - Cloud model on Ollama.
-- Coding-focused and agentic.
-- 256K context window, useful for schema/profile/history context.
-- Recent listing update at time of implementation.
+- Coding-focused and available to the current API key.
+- Good fit for generated Python/pandas analysis code.
+- Native cloud API host is `https://ollama.com`; chat requests use `/api/chat`.
 
-Alternate: `glm-5.1:cloud`, because Ollama describes it as a flagship agentic engineering model with strong coding capabilities.
+Premium recommendation if the account has subscription access: `kimi-k2.7-code`, because Ollama describes it as a current coding-focused agentic model with a 256K context window. Alternate premium model: `glm-5.1`, because Ollama describes it as a flagship agentic engineering model with strong coding capabilities.

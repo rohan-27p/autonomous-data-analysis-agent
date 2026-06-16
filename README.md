@@ -6,9 +6,9 @@ The backend accepts structured data, profiles it, sends business questions to an
 
 ## Current Default Model
 
-Default: `kimi-k2.7-code:cloud`
+Default for direct Ollama Cloud API in this repo: `qwen3-coder:480b`
 
-Reason: Ollama lists it as a current cloud model focused on agentic coding, with tool/thinking support and a 256K context window. That fits this backend because the model must generate and repair Python analysis code from schema/profile context. `glm-5.1:cloud` is the documented alternate for agentic engineering.
+Reason: `qwen3-coder:480b` is a cloud coding model available to the current API key and is suited for generated Python/pandas analysis code. The best premium choice remains `kimi-k2.7-code`, but the current account receives a subscription-required error for that model. `glm-5.1` is also a strong agentic engineering model, but it currently returns the same subscription-required error on this key.
 
 References:
 - https://ollama.com/library/kimi-k2.7-code
@@ -20,7 +20,7 @@ References:
 - CSV, Excel, JSON ingestion.
 - SQL ingestion through SQLAlchemy for SELECT queries.
 - Automatic dataset profiling: schema, data types, null rates, distributions, duplicate rows, and anomaly hints.
-- Ollama Cloud client using OpenAI-compatible `/chat/completions`.
+- Ollama Cloud client using native `/api/chat`.
 - Generated Python analysis code contract: `result_df` and `chart_spec`.
 - Controlled subprocess execution with blocked unsafe operations and timeout.
 - Error repair loop with configurable retry count.
@@ -43,7 +43,8 @@ Edit `.env`:
 
 ```text
 AUTODATA_OLLAMA_API_KEY=your_ollama_key
-AUTODATA_OLLAMA_MODEL=kimi-k2.7-code:cloud
+AUTODATA_OLLAMA_BASE_URL=https://ollama.com
+AUTODATA_OLLAMA_MODEL=qwen3-coder:480b
 ```
 
 Run the API:
@@ -56,6 +57,12 @@ Open:
 
 ```text
 http://127.0.0.1:8000/docs
+```
+
+Check Ollama Cloud connectivity:
+
+```powershell
+python scripts/check_ollama_connection.py
 ```
 
 ## Main API Endpoints
