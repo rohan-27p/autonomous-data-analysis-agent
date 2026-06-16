@@ -150,6 +150,31 @@ class FakeAlwaysMissingColumnLLM:
         )
 
 
+class FakeCompactOllamaShapeLLM:
+    def chat_json(self, *, system: str, user: str) -> str:
+        if "business findings" in system:
+            return json.dumps(
+                {
+                    "key_finding": "The dataset contains business order records.",
+                    "business_meaning": "It can be used for revenue and profit analysis.",
+                    "limitations": "Only a preview was requested.",
+                    "follow_up_questions": "Which category has the highest sales?",
+                }
+            )
+        return json.dumps(
+            {
+                "result_df": "df.head(10)",
+                "chart_spec": {
+                    "chart_type": "table",
+                    "title": "Dataset Overview",
+                    "x": "category",
+                    "y": "sales",
+                    "caption": "Preview of the uploaded dataset.",
+                },
+            }
+        )
+
+
 def test_analysis_service_repairs_failed_generated_code(tmp_path):
     datasets = DatasetStore(tmp_path / "uploads", max_upload_bytes=5_000_000)
     info = datasets.put_file(
@@ -212,3 +237,27 @@ def test_analysis_service_fails_gracefully_after_plan_validation_retries(tmp_pat
 
     assert exc.value.code == "analysis_execution_failed"
     assert "revenue" in exc.value.details["error"]
+
+
+def test_analysis_service_normalizes_compact_ollama_shape(tmp_path):
+    datasets = DatasetStore(tmp_path / "uploads", max_upload_bytes=5_000_000)
+    info = datasets.put_file("orders.csv", b"category,sales\nA,100\nB,10\n")
+    service = AnalysisService(
+        datasets=datasets,
+        sessions=SessionStore(tmp_path / "sessions.sqlite3"),
+        llm=FakeCompactOllamaShapeLLM(),
+        executor=CodeExecutor(timeout_seconds=5),
+        max_repair_attempts=2,
+    )
+
+    response = service.analyze(
+        AnalysisRequest(dataset_id=info.dataset_id, question="What is this CSV about?")
+    )
+
+    assert response.plan.operation == "overview"
+    assert response.execution.success is True
+    assert response.execution.chart_spec is not None
+    assert response.execution.chart_spec.chart_type == "table"
+    assert response.execution.result_rows[0]["category"] == "A"
+    assert response.narrative.limitations == ["Only a preview was requested."]
+    assert response.narrative.follow_up_questions == ["Which category has the highest sales?"]

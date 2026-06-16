@@ -60,7 +60,9 @@ def test_ollama_client_uses_native_cloud_chat_endpoint(monkeypatch, tmp_path):
     assert captured["url"] == "https://ollama.com/api/chat"
     assert captured["json"]["model"] == "qwen3-coder:480b"
     assert captured["json"]["format"] == "json"
+    assert captured["json"]["options"]["num_predict"] == 1200
     assert captured["json"]["stream"] is False
+    assert "think" not in captured["json"]
     assert captured["headers"]["Authorization"] == "Bearer test-key"
 
 

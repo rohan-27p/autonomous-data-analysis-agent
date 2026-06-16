@@ -29,7 +29,7 @@ The configured base URL is `https://ollama.com`, matching Ollama's native cloud 
 - `messages`
 - `format`
 - `options`
-- `think`
+- optional `think`, disabled by default for faster structured JSON/code generation
 - `stream`
 
 The required API key is read from `AUTODATA_OLLAMA_API_KEY`.
@@ -37,6 +37,8 @@ The required API key is read from `AUTODATA_OLLAMA_API_KEY`.
 For direct `https://ollama.com/api` access, the model names come from `GET /api/tags` and do not use the local CLI `:cloud` suffix. Example: use `kimi-k2.7-code`, not `kimi-k2.7-code:cloud`.
 
 The current `.env` uses `qwen3-coder:480b` because it is visible and callable with the current API key. Direct calls to `kimi-k2.7-code` and `glm-5.1` returned `403` subscription-required responses, so they remain documented as premium recommendations instead of silently falling back to them.
+
+The app sets `AUTODATA_OLLAMA_THINK=false` by default and caps `AUTODATA_OLLAMA_NUM_PREDICT=1200` to avoid long-running reasoning responses for schema-constrained JSON/code generation.
 
 ### Generated Code Contract
 

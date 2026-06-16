@@ -34,10 +34,14 @@ class OllamaCloudClient:
                 {"role": "user", "content": user},
             ],
             "format": "json",
-            "options": {"temperature": 0.1},
-            "think": self.settings.ollama_reasoning_effort,
+            "options": {
+                "temperature": 0.1,
+                "num_predict": self.settings.ollama_num_predict,
+            },
             "stream": False,
         }
+        if self.settings.ollama_think.strip().lower() not in {"", "0", "false", "off", "none"}:
+            payload["think"] = self.settings.ollama_think
         headers = {"Authorization": f"Bearer {api_key.get_secret_value()}"}
         try:
             response = httpx.post(
