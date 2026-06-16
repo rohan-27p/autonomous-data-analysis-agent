@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class ChartType(StrEnum):
@@ -62,6 +62,7 @@ class SQLIngestRequest(BaseModel):
 
 
 class AnalysisOperation(StrEnum):
+    OVERVIEW = "overview"
     AGGREGATION = "aggregation"
     FILTERING = "filtering"
     GROUPING = "grouping"
@@ -87,6 +88,15 @@ class ChartSpec(BaseModel):
     y: str | None = None
     color: str | None = None
     caption: str
+
+    @field_validator("x", "y", "color", mode="before")
+    @classmethod
+    def normalize_optional_axis(cls, value: Any) -> Any:
+        if value == [] or value == "":
+            return None
+        if isinstance(value, list):
+            return str(value[0]) if value else None
+        return value
 
 
 class Narrative(BaseModel):
