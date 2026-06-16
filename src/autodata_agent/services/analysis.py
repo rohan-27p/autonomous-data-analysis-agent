@@ -5,8 +5,11 @@ import json
 from autodata_agent.core.errors import ExecutionAppError, ValidationAppError
 from autodata_agent.core.json_utils import extract_json_object
 from autodata_agent.core.schemas import (
+    AnalysisOperation,
+    AnalysisPlan,
     AnalysisRequest,
     AnalysisResponse,
+    ChartType,
     ExecutionResult,
     GeneratedAnalysisCode,
     Narrative,
@@ -17,7 +20,20 @@ from autodata_agent.services.llm import LLMClient
 from autodata_agent.storage.session_store import SessionStore
 
 GENERATION_SYSTEM_PROMPT = """You are the code-generation brain for a data analysis backend.
-Return only valid JSON. Do not include markdown.
+Return only valid JSON matching this exact schema:
+{
+  "plan": {
+    "operation": "one allowed operation value",
+    "objective": "short objective",
+    "required_columns": ["only columns that exist in the dataset"],
+    "assumptions": ["short assumptions"],
+    "chart_type": "bar|line|scatter|heatmap|distribution|table"
+  },
+  "code": "Python code as one string. It must define result_df and chart_spec."
+}
+Allowed operation values: overview, aggregation, filtering, grouping, trend_analysis,
+correlation, segmentation, distribution, anomaly_detection.
+Do not return top-level result_df. Do not return top-level chart_spec. Do not include markdown.
 Generate Python/pandas code against an existing DataFrame named df.
 The code must define:
 1. result_df: a pandas DataFrame containing the final answer.
@@ -184,7 +200,9 @@ class AnalysisService:
         )
         raw = self.llm.chat_json(system=NARRATIVE_SYSTEM_PROMPT, user=user)
         try:
-            return Narrative.model_validate(extract_json_object(raw))
+            return Narrative.model_validate(
+                self._normalize_narrative_payload(extract_json_object(raw))
+            )
         except ValidationAppError:
             raise
         except Exception as exc:
@@ -194,8 +212,23 @@ class AnalysisService:
                 details={"reason": str(exc)},
             ) from exc
 
+    def _normalize_narrative_payload(self, data: dict) -> dict:
+        normalized = dict(data)
+        for key in ("limitations", "follow_up_questions"):
+            value = normalized.get(key)
+            if isinstance(value, str):
+                normalized[key] = [value]
+            elif value is None:
+                normalized[key] = []
+        for key in ("key_finding", "business_meaning"):
+            value = normalized.get(key)
+            if isinstance(value, list):
+                normalized[key] = " ".join(str(item) for item in value)
+        return normalized
+
     def _parse_generated(self, raw: str) -> GeneratedAnalysisCode:
         data = extract_json_object(raw)
+        data = self._normalize_generated_payload(data)
         try:
             return GeneratedAnalysisCode.model_validate(data)
         except Exception as exc:
@@ -204,6 +237,56 @@ class AnalysisService:
                 "The model returned generated analysis that did not match the required schema.",
                 details={"reason": str(exc)},
             ) from exc
+
+    def _normalize_generated_payload(self, data: dict) -> dict:
+        if "plan" in data and "code" in data:
+            return data
+
+        if "result_df" not in data and "chart_spec" not in data:
+            return data
+
+        result_expr = data.get("result_df", "df.head(10)")
+        if not isinstance(result_expr, str) or not result_expr.strip():
+            result_expr = "df.head(10)"
+        chart_spec = data.get("chart_spec")
+        if not isinstance(chart_spec, dict):
+            chart_spec = {
+                "chart_type": "table",
+                "title": "Dataset Overview",
+                "x": None,
+                "y": None,
+                "caption": "Generated dataset overview.",
+            }
+
+        chart_type = chart_spec.get("chart_type", ChartType.TABLE)
+        required_columns = [
+            value
+            for value in (chart_spec.get("x"), chart_spec.get("y"), chart_spec.get("color"))
+            if isinstance(value, str) and value
+        ]
+        code = "\n".join(
+            [
+                f"result_df = {result_expr}",
+                f"chart_spec = {chart_spec!r}",
+            ]
+        )
+        return {
+            "plan": AnalysisPlan(
+                operation=AnalysisOperation.OVERVIEW,
+                objective=str(
+                    chart_spec.get("caption")
+                    or chart_spec.get("title")
+                    or "Dataset overview"
+                ),
+                required_columns=required_columns,
+                assumptions=[
+                    "Model returned a compact result expression and chart spec; "
+                    "backend normalized it to the executable analysis contract."
+                ],
+                chart_type=chart_type,
+            ).model_dump(mode="json"),
+            "code": code,
+        }
 
     def _history_summary(self, response: AnalysisResponse) -> dict:
         return {

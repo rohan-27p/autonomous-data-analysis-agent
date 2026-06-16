@@ -41,3 +41,24 @@ def test_executor_blocks_unsafe_code():
         CodeExecutor(timeout_seconds=5).execute(df, "result_df = df\nopen('x.txt', 'w')")
 
     assert exc.value.code == "unsafe_generated_code"
+
+
+def test_executor_normalizes_empty_chart_axes():
+    df = pd.DataFrame([{"category": "A", "sales": 100}])
+    code = """
+result_df = df.head(1)
+chart_spec = {
+    "chart_type": "table",
+    "title": "Preview",
+    "x": [],
+    "y": [],
+    "caption": "Dataset preview."
+}
+"""
+
+    result = CodeExecutor(timeout_seconds=5).execute(df, code)
+
+    assert result.success is True
+    assert result.chart_spec is not None
+    assert result.chart_spec.x is None
+    assert result.chart_spec.y is None
