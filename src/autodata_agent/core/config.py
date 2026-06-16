@@ -19,9 +19,9 @@ class Settings(BaseSettings):
     storage_dir: Path = Path("data/runtime")
     upload_dir: Path = Path("data/uploads")
 
-    ollama_base_url: str = "https://ollama.com/v1"
+    ollama_base_url: str = "https://ollama.com"
     ollama_api_key: SecretStr | None = None
-    ollama_model: str = "kimi-k2.7-code:cloud"
+    ollama_model: str = "qwen3-coder:480b"
     ollama_reasoning_effort: str = "medium"
 
     llm_timeout_seconds: float = 90
@@ -40,4 +40,3 @@ def get_settings() -> Settings:
     settings = Settings()
     settings.ensure_dirs()
     return settings
-
