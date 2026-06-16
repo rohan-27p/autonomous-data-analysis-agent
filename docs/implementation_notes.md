@@ -23,16 +23,20 @@ Built a backend-only Python service. No frontend is included yet. FastAPI is use
 
 ### Ollama Notes
 
-The configured base URL is `https://ollama.com/v1`, which matches Ollama's OpenAI-compatible API shape. The client calls `/chat/completions` and sends:
+The configured base URL is `https://ollama.com`, matching Ollama's native cloud host shown in the official Python client examples. The client calls `/api/chat` and sends:
 
 - `model`
 - `messages`
-- `temperature`
-- `response_format`
-- `reasoning_effort`
+- `format`
+- `options`
+- `think`
 - `stream`
 
 The required API key is read from `AUTODATA_OLLAMA_API_KEY`.
+
+For direct `https://ollama.com/api` access, the model names come from `GET /api/tags` and do not use the local CLI `:cloud` suffix. Example: use `kimi-k2.7-code`, not `kimi-k2.7-code:cloud`.
+
+The current `.env` uses `qwen3-coder:480b` because it is visible and callable with the current API key. Direct calls to `kimi-k2.7-code` and `glm-5.1` returned `403` subscription-required responses, so they remain documented as premium recommendations instead of silently falling back to them.
 
 ### Generated Code Contract
 

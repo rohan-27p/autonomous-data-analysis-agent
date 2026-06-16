@@ -26,16 +26,16 @@ class OllamaCloudClient:
                 status_code=503,
             )
 
-        url = self.settings.ollama_base_url.rstrip("/") + "/chat/completions"
+        url = self.settings.ollama_base_url.rstrip("/") + "/api/chat"
         payload = {
             "model": self.settings.ollama_model,
             "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
-            "temperature": 0.1,
-            "response_format": {"type": "json_object"},
-            "reasoning_effort": self.settings.ollama_reasoning_effort,
+            "format": "json",
+            "options": {"temperature": 0.1},
+            "think": self.settings.ollama_reasoning_effort,
             "stream": False,
         }
         headers = {"Authorization": f"Bearer {api_key.get_secret_value()}"}
@@ -48,12 +48,39 @@ class OllamaCloudClient:
             )
             response.raise_for_status()
             data = response.json()
-            return data["choices"][0]["message"]["content"]
-        except (httpx.HTTPError, KeyError, IndexError, ValueError) as exc:
+            return data["message"]["content"]
+        except httpx.HTTPStatusError as exc:
+            ollama_error = _extract_ollama_error(exc.response)
+            raise ExternalServiceError(
+                "ollama_request_failed",
+                ollama_error or "Ollama model request failed.",
+                status_code=503,
+                details={
+                    "reason": str(exc),
+                    "status_code": exc.response.status_code,
+                    "response_body": exc.response.text[:1000],
+                    "ollama_error": ollama_error,
+                    "model": self.settings.ollama_model,
+                    "url": url,
+                },
+            ) from exc
+        except (httpx.HTTPError, KeyError, TypeError, ValueError) as exc:
             raise ExternalServiceError(
                 "ollama_request_failed",
                 "Ollama model request failed.",
                 status_code=503,
-                details={"reason": str(exc), "model": self.settings.ollama_model},
+                details={
+                    "reason": str(exc),
+                    "model": self.settings.ollama_model,
+                    "url": url,
+                },
             ) from exc
 
+
+def _extract_ollama_error(response: httpx.Response) -> str | None:
+    try:
+        payload = response.json()
+    except ValueError:
+        return None
+    error = payload.get("error") if isinstance(payload, dict) else None
+    return error if isinstance(error, str) and error else None
