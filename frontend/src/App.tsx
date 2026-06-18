@@ -25,7 +25,7 @@ import {
   UserCircle,
   X,
 } from "lucide-react";
-import { ChangeEvent, FormEvent, useEffect, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 
 import { AutodataApi } from "./api";
 import {
@@ -43,6 +43,15 @@ import {
 const api = new AutodataApi();
 
 type Notice = { type: "success" | "error" | "info"; title: string; body?: string };
+
+type ChatTurn = {
+  id: string;
+  question: string;
+  createdAt: string;
+  status: "pending" | "complete" | "error";
+  analysis?: AnalysisResponse;
+  error?: string;
+};
 
 function formatNumber(value: unknown) {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -89,6 +98,7 @@ export function App() {
   const [dataset, setDataset] = useState<DatasetInfo | null>(null);
   const [preview, setPreview] = useState<DatasetPreview | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisResponse | null>(null);
+  const [chatTurns, setChatTurns] = useState<ChatTurn[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [history, setHistory] = useState<SessionRecord[]>([]);
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -136,6 +146,7 @@ export function App() {
       const response = await api.uploadDataset(file);
       setDataset(response);
       setAnalysis(null);
+      setChatTurns([]);
       setSessionId(null);
       setHistory([]);
       setPage("profile");
@@ -158,6 +169,7 @@ export function App() {
       const response = await api.ingestSql(connectionUri, query, sourceName);
       setDataset(response);
       setAnalysis(null);
+      setChatTurns([]);
       setSessionId(null);
       setHistory([]);
       setPage("profile");
@@ -186,13 +198,33 @@ export function App() {
 
     setBusy("analysis");
     setNotice(null);
+    const turnId = `turn-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const createdAt = new Date().toISOString();
+    setChatTurns((current) => [
+      ...current,
+      { id: turnId, question, createdAt, status: "pending" },
+    ]);
+    setPage("ask");
     try {
       const response = await api.analyze(dataset.dataset_id, question, sessionId);
       setAnalysis(response);
+      setChatTurns((current) =>
+        current.map((turn) =>
+          turn.id === turnId
+            ? { ...turn, status: "complete", analysis: response, createdAt: response.created_at }
+            : turn,
+        ),
+      );
       setSessionId(response.session_id);
       setPage("ask");
       await loadHistory(response.session_id);
     } catch (error) {
+      const message = error instanceof Error ? error.message : "The agent could not complete this request.";
+      setChatTurns((current) =>
+        current.map((turn) =>
+          turn.id === turnId ? { ...turn, status: "error", error: message } : turn,
+        ),
+      );
       showApiError("Analysis failed", error);
     } finally {
       setBusy(null);
@@ -217,6 +249,7 @@ export function App() {
         onClose={() => setSidebarOpen(false)}
         onNewAnalysis={() => {
           setAnalysis(null);
+          setChatTurns([]);
           setPage(dataset ? "ask" : "sources");
         }}
         onPageChange={(nextPage) => {
@@ -253,7 +286,7 @@ export function App() {
             <AskAgentView
               busy={busy}
               dataset={dataset}
-              analysis={analysis}
+              chatTurns={chatTurns}
               onAsk={handleAnalyze}
               onNeedDataset={() => setPage("sources")}
             />
@@ -667,22 +700,28 @@ function PreviewTable({ preview }: { preview: DatasetPreview }) {
 function AskAgentView({
   busy,
   dataset,
-  analysis,
+  chatTurns,
   onAsk,
   onNeedDataset,
 }: {
   busy: string | null;
   dataset: DatasetInfo | null;
-  analysis: AnalysisResponse | null;
+  chatTurns: ChatTurn[];
   onAsk: (question: string) => void;
   onNeedDataset: () => void;
 }) {
   const [question, setQuestion] = useState("");
+  const transcriptEndRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    transcriptEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [chatTurns, busy]);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!question.trim()) return;
     onAsk(question.trim());
+    setQuestion("");
   }
 
   if (!dataset) {
@@ -692,7 +731,7 @@ function AskAgentView({
   return (
     <section className="ask-layout">
       <DatasetContext dataset={dataset} />
-      {!analysis && (
+      {chatTurns.length === 0 ? (
         <div className="agent-intro">
           <div className="agent-icon"><Bot size={34} /></div>
           <h2>How can I help you analyze this data?</h2>
@@ -700,6 +739,13 @@ function AskAgentView({
             Ask a question in plain English. The response will be generated from the
             active dataset through the backend API.
           </p>
+        </div>
+      ) : (
+        <div className="chat-transcript" aria-live="polite">
+          {chatTurns.map((turn) => (
+            <ChatTurnView key={turn.id} turn={turn} onAsk={onAsk} />
+          ))}
+          <div ref={transcriptEndRef} />
         </div>
       )}
       <form className="agent-composer" onSubmit={submit}>
@@ -716,9 +762,43 @@ function AskAgentView({
           </button>
         </div>
       </form>
-      {analysis && <ResultView analysis={analysis} onAsk={onAsk} />}
       <p className="fine-print">AI-generated analysis may be inaccurate. Verify critical business insights.</p>
     </section>
+  );
+}
+
+function ChatTurnView({ turn, onAsk }: { turn: ChatTurn; onAsk: (question: string) => void }) {
+  return (
+    <article className="chat-turn">
+      <div className="chat-message user-message">
+        <div className="message-bubble">
+          <p>{turn.question}</p>
+          <span>{new Date(turn.createdAt).toLocaleString()}</span>
+        </div>
+        <div className="message-avatar user-avatar">AD</div>
+      </div>
+
+      <div className="chat-message ai-message">
+        <div className="message-avatar ai-avatar"><Bot size={20} /></div>
+        <div className="message-bubble ai-bubble">
+          {turn.status === "pending" && (
+            <div className="thinking-state">
+              <Loader2 className="spin" size={18} />
+              <span>Analyzing the dataset...</span>
+            </div>
+          )}
+          {turn.status === "error" && (
+            <div className="error-state">
+              <AlertTriangle size={18} />
+              <span>{turn.error ?? "Analysis failed."}</span>
+            </div>
+          )}
+          {turn.status === "complete" && turn.analysis && (
+            <ResultView analysis={turn.analysis} onAsk={onAsk} mode="chat" />
+          )}
+        </div>
+      </div>
+    </article>
   );
 }
 
@@ -799,19 +879,21 @@ function ResultHistoryView({
 function ResultView({
   analysis,
   onAsk,
+  mode = "standalone",
 }: {
   analysis: AnalysisResponse;
   onAsk: (question: string) => void;
+  mode?: "standalone" | "chat";
 }) {
   const rows = analysis.execution.result_rows;
   const chartSpec = analysis.execution.chart_spec;
 
   return (
-    <div className="result-view">
+    <div className={`result-view ${mode === "chat" ? "chat-result" : ""}`}>
       <section className="result-question">
         <div className="agent-small"><Bot size={24} /></div>
         <div>
-          <h2>{analysis.question}</h2>
+          <h2>{mode === "chat" ? "Analysis result" : analysis.question}</h2>
           <p>
             <Table2 size={16} /> Dataset {analysis.dataset_id.slice(0, 8)}
             <span /> {new Date(analysis.created_at).toLocaleString()}
