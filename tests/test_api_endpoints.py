@@ -98,3 +98,47 @@ def test_preview_endpoint_returns_rows_with_limit(api_client: TestClient):
     assert payload["rows"][0]["category"] == "A"
     assert payload["rows"][1]["sales"] == 50
 
+
+def test_render_chart_endpoint_returns_plotly_figure(api_client: TestClient):
+    response = api_client.post(
+        "/api/v1/charts/render",
+        json={
+            "chart_spec": {
+                "chart_type": "bar",
+                "title": "Sales by Category",
+                "x": "category",
+                "y": "sales",
+                "caption": "Category A leads sales.",
+            },
+            "result_rows": [
+                {"category": "A", "sales": 150},
+                {"category": "B", "sales": 75},
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["caption"] == "Category A leads sales."
+    assert payload["figure"]["layout"]["title"]["text"] == "Sales by Category"
+    assert payload["figure"]["data"][0]["type"] == "bar"
+
+
+def test_render_chart_endpoint_returns_structured_validation_error(api_client: TestClient):
+    response = api_client.post(
+        "/api/v1/charts/render",
+        json={
+            "chart_spec": {
+                "chart_type": "bar",
+                "title": "Sales by Category",
+                "x": "category",
+                "y": "sales",
+                "caption": "No rows.",
+            },
+            "result_rows": [],
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "empty_chart_data"
+
