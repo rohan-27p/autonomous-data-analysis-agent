@@ -5,6 +5,7 @@ frontend/dist/
 .vscode/
 __pycache__/
 *.py[cod]
+*.tsbuildinfo
 .pytest_cache/
 .ruff_cache/
 .coverage
