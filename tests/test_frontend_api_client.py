@@ -6,7 +6,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-FRONTEND_DIR = Path(__file__).resolve().parents[1] / "frontend"
+FRONTEND_DIR = Path(__file__).resolve().parents[1] / "frontend-streamline"
 sys.path.insert(0, str(FRONTEND_DIR))
 
 from api_client import ApiError, AutodataApiClient  # noqa: E402

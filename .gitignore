@@ -1,9 +1,11 @@
 .venv/
 node_modules/
+frontend/dist/
 .claude/
 .vscode/
 __pycache__/
 *.py[cod]
+*.tsbuildinfo
 .pytest_cache/
 .ruff_cache/
 .coverage
