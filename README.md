@@ -75,6 +75,7 @@ python scripts/check_ollama_connection.py
 | POST | `/api/v1/datasets/upload` | Upload CSV/XLSX/JSON |
 | POST | `/api/v1/datasets/sql` | Ingest SQL SELECT query |
 | GET | `/api/v1/datasets/{dataset_id}/profile` | View automatic profile |
+| GET | `/api/v1/datasets/{dataset_id}/preview` | Preview uploaded dataset rows |
 | POST | `/api/v1/analysis` | Ask a business question |
 | GET | `/api/v1/sessions/{session_id}/history` | Read session history |
 

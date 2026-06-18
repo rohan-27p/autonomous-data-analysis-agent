@@ -155,3 +155,10 @@ class HealthStatus(BaseModel):
 
 class ErrorResponse(BaseModel):
     error: dict[str, Any]
+
+
+class DatasetPreview(BaseModel):
+    dataset_id: str
+    columns: list[str]
+    rows: list[dict[str, Any]]
+
