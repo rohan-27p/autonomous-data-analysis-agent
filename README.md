@@ -78,6 +78,33 @@ python scripts/check_ollama_connection.py
 | GET | `/api/v1/datasets/{dataset_id}/preview` | Preview uploaded dataset rows |
 | POST | `/api/v1/analysis` | Ask a business question |
 | GET | `/api/v1/sessions/{session_id}/history` | Read session history |
+| GET | `/api/v1/sessions/{session_id}/export` | Download a JSON report of all analyses in a session |
+
+### Session Export
+
+`GET /api/v1/sessions/{session_id}/export` returns a clean JSON report of every analysis run in a session, in chronological order. It reads only stored session records — it does not call Ollama or rerun generated code. An empty or unknown session returns an empty `analyses` list.
+
+```json
+{
+  "session_id": "...",
+  "exported_at": "2026-06-18T...",
+  "analyses": [
+    {
+      "question": "Which product categories generated the highest total revenue?",
+      "operation": "aggregation",
+      "generated_code": "...",
+      "result_rows": [{ "category": "A", "sales": 150 }],
+      "chart_spec": { "chart_type": "bar", "title": "Sales by Category", "...": "..." },
+      "narrative": {
+        "key_finding": "...",
+        "business_meaning": "...",
+        "limitations": ["..."],
+        "follow_up_questions": ["..."]
+      }
+    }
+  ]
+}
+```
 
 ## Example Request Flow
 
