@@ -54,11 +54,6 @@ def _render_execution(execution: dict[str, Any]) -> None:
     else:
         st.warning("Analysis completed but returned no result rows.")
 
-    chart_spec = execution.get("chart_spec")
-    if chart_spec:
-        st.markdown("**Chart specification**")
-        st.json(chart_spec)
-
     stdout = (execution.get("stdout") or "").strip()
     if stdout:
         with st.expander("Execution stdout"):
@@ -141,6 +136,11 @@ def render_analysis(client: AutodataApiClient) -> None:
             else:
                 st.session_state["session_id"] = response["session_id"]
                 st.session_state["last_analysis"] = response
+                st.session_state["selected_analysis"] = response
+                st.session_state.pop(
+                    f"session_history_cache::{response['session_id']}",
+                    None,
+                )
                 st.success("Analysis completed.")
                 st.rerun()
 
@@ -153,6 +153,10 @@ def render_analysis(client: AutodataApiClient) -> None:
         reset_cols = st.columns([1, 3])
         with reset_cols[0]:
             if st.button("Start new session", use_container_width=True):
+                session_id = st.session_state.get("session_id")
                 st.session_state["session_id"] = None
                 st.session_state["last_analysis"] = None
+                st.session_state["selected_analysis"] = None
+                if session_id:
+                    st.session_state.pop(f"session_history_cache::{session_id}", None)
                 st.rerun()

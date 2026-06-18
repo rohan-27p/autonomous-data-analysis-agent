@@ -5,6 +5,7 @@ import streamlit as st
 
 from api_client import ApiError, AutodataApiClient
 from components.analysis import render_analysis
+from components.charts_history import render_charts_history
 from components.upload_profile import render_upload_profile
 
 DEFAULT_API_URL = "http://127.0.0.1:8000"
@@ -92,4 +93,4 @@ render_analysis(client)
 st.divider()
 
 st.subheader("3. Charts & History")
-st.info("Chart rendering and session history UI will be added in the next commit.")
+render_charts_history(client)
