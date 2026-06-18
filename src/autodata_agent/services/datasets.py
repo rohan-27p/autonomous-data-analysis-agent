@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import json
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -11,6 +12,7 @@ from sqlalchemy import create_engine, text
 from autodata_agent.core.errors import ValidationAppError
 from autodata_agent.core.schemas import (
     DatasetInfo,
+    DatasetPreview,
     DatasetProfile,
     DataSourceType,
     SQLIngestRequest,
@@ -106,6 +108,20 @@ class DatasetStore:
                 status_code=404,
                 details={"dataset_id": dataset_id},
             ) from exc
+
+    def preview(self, dataset_id: str, limit: int = 20) -> DatasetPreview:
+        stored = self.get(dataset_id)
+        df = stored.dataframe.head(limit)
+        rows = json.loads(
+            df.where(pd.notnull(df), None).to_json(orient="records", date_format="iso")
+        )
+        return DatasetPreview(
+            dataset_id=dataset_id,
+            columns=[str(col) for col in df.columns],
+            rows=rows,
+            row_count=len(stored.dataframe),
+            returned_rows=len(rows),
+        )
 
     def _store(
         self,
