@@ -6,6 +6,7 @@ import {
   DatasetPreview,
   DatasetProfile,
   HealthStatus,
+  SessionExport,
   SessionRecord,
 } from "./types";
 
@@ -111,5 +112,9 @@ export class AutodataApi {
 
   history(sessionId: string) {
     return this.request<SessionRecord[]>(`/sessions/${sessionId}/history`);
+  }
+
+  exportSession(sessionId: string) {
+    return this.request<SessionExport>(`/sessions/${sessionId}/export`);
   }
 }

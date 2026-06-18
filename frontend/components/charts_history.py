@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from typing import Any
 
 import plotly.graph_objects as go
@@ -39,22 +38,6 @@ def _load_session_history(client: AutodataApiClient, session_id: str) -> list[di
     except ApiError as exc:
         st.error(f"Could not load session history: {exc.message} (`{exc.code}`)")
         return []
-
-
-def _render_export_button(client: AutodataApiClient, session_id: str) -> None:
-    try:
-        report = client.export_session(session_id)
-    except ApiError as exc:
-        st.error(f"Could not build export: {exc.message} (`{exc.code}`)")
-        return
-
-    st.download_button(
-        "Download report",
-        data=json.dumps(report, indent=2),
-        file_name=f"analysis-report-{session_id[:8]}.json",
-        mime="application/json",
-        use_container_width=True,
-    )
 
 
 def _render_history_item(record: dict[str, Any], index: int) -> None:
@@ -123,13 +106,9 @@ def render_charts_history(client: AutodataApiClient) -> None:
             st.info("No active session yet.")
             return
 
-        history_actions = st.columns(2)
-        with history_actions[0]:
-            if st.button("Refresh history", use_container_width=True):
-                st.session_state.pop("session_history_cache", None)
-                st.rerun()
-        with history_actions[1]:
-            _render_export_button(client, session_id)
+        if st.button("Refresh history", use_container_width=True):
+            st.session_state.pop("session_history_cache", None)
+            st.rerun()
 
         cache_key = f"session_history_cache::{session_id}"
         if cache_key not in st.session_state:

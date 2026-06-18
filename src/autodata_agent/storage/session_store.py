@@ -68,6 +68,31 @@ class SessionStore:
             )
         return records
 
+    def all_records(self, session_id: str) -> list[SessionRecord]:
+        with sqlite3.connect(self.db_path) as conn:
+            rows = conn.execute(
+                """
+                SELECT record_id, session_id, dataset_id, question, response_json, created_at
+                FROM session_records
+                WHERE session_id = ?
+                ORDER BY id ASC
+                """,
+                (session_id,),
+            ).fetchall()
+        records: list[SessionRecord] = []
+        for record_id, sid, dataset_id, question, response_json, created_at in rows:
+            records.append(
+                SessionRecord(
+                    record_id=record_id,
+                    session_id=sid,
+                    dataset_id=dataset_id,
+                    question=question,
+                    response=AnalysisResponse.model_validate(json.loads(response_json)),
+                    created_at=created_at,
+                )
+            )
+        return records
+
     def _init_db(self) -> None:
         with sqlite3.connect(self.db_path) as conn:
             conn.execute(

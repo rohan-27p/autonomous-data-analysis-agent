@@ -322,6 +322,19 @@ textarea:focus {
   background: var(--surface-container);
 }
 
+.icon-button:disabled {
+  color: var(--on-muted);
+  background: transparent;
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.panel-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .avatar {
   display: grid;
   width: 36px;

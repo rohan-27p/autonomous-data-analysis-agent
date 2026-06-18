@@ -7,6 +7,7 @@ import {
   Cloud,
   Code2,
   Database,
+  Download,
   FileJson,
   FileSpreadsheet,
   History,
@@ -136,6 +137,37 @@ export function App() {
       setHistory(await api.history(nextSessionId));
     } catch {
       setHistory([]);
+    }
+  }
+
+  async function handleExport() {
+    if (!sessionId) return;
+    setBusy("export");
+    setNotice(null);
+    try {
+      const report = await api.exportSession(sessionId);
+      const blob = new Blob([JSON.stringify(report, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `analysis-report-${sessionId.slice(0, 8)}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setNotice({
+        type: "success",
+        title: "Report exported",
+        body: `Downloaded ${report.analyses.length} ${
+          report.analyses.length === 1 ? "analysis" : "analyses"
+        } for this session.`,
+      });
+    } catch (error) {
+      showApiError("Export failed", error);
+    } finally {
+      setBusy(null);
     }
   }
 
@@ -295,9 +327,11 @@ export function App() {
             <ResultHistoryView
               analysis={analysis}
               history={history}
+              busy={busy}
               onAsk={handleAnalyze}
               onSelectAnalysis={setAnalysis}
               onRefreshHistory={() => loadHistory()}
+              onExport={handleExport}
             />
           )}
           {page === "settings" && (
@@ -824,15 +858,19 @@ function DatasetContext({ dataset }: { dataset: DatasetInfo }) {
 function ResultHistoryView({
   analysis,
   history,
+  busy,
   onAsk,
   onRefreshHistory,
   onSelectAnalysis,
+  onExport,
 }: {
   analysis: AnalysisResponse | null;
   history: SessionRecord[];
+  busy: string | null;
   onAsk: (question: string) => void;
   onRefreshHistory: () => void;
   onSelectAnalysis: (analysis: AnalysisResponse) => void;
+  onExport: () => void;
 }) {
   const activeAnalysis = analysis ?? history[0]?.response ?? null;
 
@@ -853,7 +891,19 @@ function ResultHistoryView({
         <PanelHeader
           icon={<History size={21} />}
           title="Analysis History"
-          trailing={<button className="icon-button" onClick={onRefreshHistory}><RefreshCw size={16} /></button>}
+          trailing={
+            <div className="panel-actions">
+              <button
+                className="icon-button"
+                onClick={onExport}
+                disabled={!history.length || busy === "export"}
+                title="Download JSON report for this session"
+              >
+                {busy === "export" ? <Loader2 size={16} className="spin" /> : <Download size={16} />}
+              </button>
+              <button className="icon-button" onClick={onRefreshHistory}><RefreshCw size={16} /></button>
+            </div>
+          }
         />
         {history.length ? (
           history.map((record) => (
