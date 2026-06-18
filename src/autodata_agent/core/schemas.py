@@ -164,3 +164,14 @@ class DatasetPreview(BaseModel):
     row_count: int
     returned_rows: int
 
+
+class ChartRenderRequest(BaseModel):
+    chart_spec: ChartSpec
+    result_rows: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class ChartRenderResponse(BaseModel):
+    chart_spec: ChartSpec
+    figure: dict[str, Any]
+    caption: str
+
