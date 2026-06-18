@@ -161,4 +161,6 @@ class DatasetPreview(BaseModel):
     dataset_id: str
     columns: list[str]
     rows: list[dict[str, Any]]
+    row_count: int
+    returned_rows: int
 
