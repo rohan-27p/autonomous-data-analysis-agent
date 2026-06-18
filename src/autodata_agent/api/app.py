@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from autodata_agent.api.routes import router
+from autodata_agent.core.config import get_settings
 from autodata_agent.core.errors import AppError
 
 
@@ -13,6 +15,7 @@ def _error_payload(code: str, message: str, details: dict | list | None = None) 
 
 
 def create_app() -> FastAPI:
+    settings = get_settings()
     app = FastAPI(
         title="Autonomous Data Analysis Agent Backend",
         version="0.1.0",
@@ -21,6 +24,14 @@ def create_app() -> FastAPI:
             "and history."
         ),
     )
+    if settings.cors_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=settings.cors_origins,
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
     app.include_router(router, prefix="/api/v1")
 
     @app.exception_handler(AppError)
