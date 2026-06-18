@@ -20,6 +20,7 @@ from autodata_agent.core.schemas import (
     DatasetPreview,
     DatasetProfile,
     HealthStatus,
+    SessionExport,
     SessionRecord,
     SQLIngestRequest,
 )
@@ -100,3 +101,11 @@ def session_history(
     sessions: SessionStoreDep,
 ) -> list[SessionRecord]:
     return sessions.history(session_id)
+
+
+@router.get("/sessions/{session_id}/export", response_model=SessionExport)
+def export_session(
+    session_id: str,
+    sessions: SessionStoreDep,
+) -> SessionExport:
+    return SessionExport.from_records(session_id, sessions.all_records(session_id))
