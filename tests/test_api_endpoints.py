@@ -81,3 +81,20 @@ def test_analysis_endpoint_returns_structured_request_validation_error(
     assert payload["error"]["code"] == "request_validation_failed"
     assert any("dataset_id" in str(item["loc"]) for item in payload["error"]["details"])
 
+
+def test_preview_endpoint_returns_rows_with_limit(api_client: TestClient):
+    upload_response = api_client.post(
+        "/api/v1/datasets/upload",
+        files={"file": ("orders.csv", b"category,sales\nA,100\nB,50\nC,75\n", "text/csv")},
+    )
+    dataset_id = upload_response.json()["dataset_id"]
+
+    response = api_client.get(f"/api/v1/datasets/{dataset_id}/preview?limit=2")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["dataset_id"] == dataset_id
+    assert payload["columns"] == ["category", "sales"]
+    assert len(payload["rows"]) == 2
+    assert payload["rows"][0]["category"] == "A"
+    assert payload["rows"][1]["sales"] == 50
+
