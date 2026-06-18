@@ -147,6 +147,40 @@ class SessionRecord(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
+class AnalysisExport(BaseModel):
+    question: str
+    operation: AnalysisOperation
+    generated_code: str
+    result_rows: list[dict[str, Any]] = Field(default_factory=list)
+    chart_spec: ChartSpec | None = None
+    narrative: Narrative
+
+    @classmethod
+    def from_record(cls, record: SessionRecord) -> AnalysisExport:
+        response = record.response
+        return cls(
+            question=record.question,
+            operation=response.plan.operation,
+            generated_code=response.generated_code,
+            result_rows=response.execution.result_rows,
+            chart_spec=response.execution.chart_spec,
+            narrative=response.narrative,
+        )
+
+
+class SessionExport(BaseModel):
+    session_id: str
+    exported_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    analyses: list[AnalysisExport] = Field(default_factory=list)
+
+    @classmethod
+    def from_records(cls, session_id: str, records: list[SessionRecord]) -> SessionExport:
+        return cls(
+            session_id=session_id,
+            analyses=[AnalysisExport.from_record(record) for record in records],
+        )
+
+
 class HealthStatus(BaseModel):
     status: Literal["ok"]
     environment: str

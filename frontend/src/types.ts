@@ -108,6 +108,21 @@ export type SessionRecord = {
   created_at: string;
 };
 
+export type AnalysisExport = {
+  question: string;
+  operation: string;
+  generated_code: string;
+  result_rows: Record<string, unknown>[];
+  chart_spec: ChartSpec | null;
+  narrative: Narrative;
+};
+
+export type SessionExport = {
+  session_id: string;
+  exported_at: string;
+  analyses: AnalysisExport[];
+};
+
 export class ApiClientError extends Error {
   code: string;
   details?: unknown;
