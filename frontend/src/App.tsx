@@ -1,11 +1,9 @@
 import {
   AlertTriangle,
   BarChart3,
-  Bell,
   Bot,
   CheckCircle2,
   ChevronRight,
-  CircleHelp,
   Cloud,
   Code2,
   Database,
@@ -19,17 +17,15 @@ import {
   Play,
   Plus,
   RefreshCw,
-  Search,
   Send,
   Settings,
-  SlidersHorizontal,
   Sparkles,
   Table2,
   UploadCloud,
   UserCircle,
   X,
 } from "lucide-react";
-import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useState } from "react";
 
 import { AutodataApi } from "./api";
 import {
@@ -44,14 +40,6 @@ import {
   SessionRecord,
 } from "./types";
 
-const demoQuestions = [
-  "Which product categories generated the highest total revenue?",
-  "How have monthly sales and profit changed over time?",
-  "Which customer segment is most profitable?",
-  "Is discount level related to profit?",
-  "Are there unusual orders with high sales, high discounts, or negative profit?",
-];
-
 const api = new AutodataApi();
 
 type Notice = { type: "success" | "error" | "info"; title: string; body?: string };
@@ -65,12 +53,6 @@ function formatNumber(value: unknown) {
 
 function formatPercent(value: number) {
   return `${(value * 100).toFixed(1)}%`;
-}
-
-function fileSize(bytes: number) {
-  if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(1)} MB`;
-  if (bytes >= 1_000) return `${(bytes / 1_000).toFixed(1)} KB`;
-  return `${bytes} B`;
 }
 
 function summarizeColumn(column: ColumnProfile) {
@@ -208,7 +190,7 @@ export function App() {
       const response = await api.analyze(dataset.dataset_id, question, sessionId);
       setAnalysis(response);
       setSessionId(response.session_id);
-      setPage("history");
+      setPage("ask");
       await loadHistory(response.session_id);
     } catch (error) {
       showApiError("Analysis failed", error);
@@ -271,6 +253,7 @@ export function App() {
             <AskAgentView
               busy={busy}
               dataset={dataset}
+              analysis={analysis}
               onAsk={handleAnalyze}
               onNeedDataset={() => setPage("sources")}
             />
@@ -359,13 +342,7 @@ function Sidebar({
                 {record.question}
               </button>
             ))
-          ) : (
-            <>
-              <span>Revenue forecast model...</span>
-              <span>Q3 Performance analysis...</span>
-              <span>Customer churn prediction...</span>
-            </>
-          )}
+          ) : <span>No API history yet</span>}
         </div>
         <div className="sidebar-status">
           <span><Cloud size={15} /> {health?.model ?? "Backend model pending"}</span>
@@ -399,18 +376,8 @@ function TopBar({
         <span className="dataset-crumb"><Table2 size={16} /> Dataset: {activeDatasetName}</span>
       </div>
       <div className="topbar-actions">
-        <label className="searchbox">
-          <Search size={18} />
-          <input placeholder="Search..." />
-        </label>
         <button className="icon-button" aria-label="Refresh backend" onClick={onRefreshHealth}>
           <RefreshCw size={19} />
-        </button>
-        <button className="icon-button" aria-label="Notifications">
-          <Bell size={19} />
-        </button>
-        <button className="icon-button" aria-label="Help">
-          <CircleHelp size={19} />
         </button>
         <div className="avatar">AD</div>
       </div>
@@ -443,9 +410,9 @@ function DataSourcesView({
   onSqlSubmit: (connectionUri: string, query: string, sourceName: string) => void;
   onUpload: (file: File) => void;
 }) {
-  const [sourceName, setSourceName] = useState("sql_dataset");
+  const [sourceName, setSourceName] = useState("");
   const [connectionUri, setConnectionUri] = useState("");
-  const [query, setQuery] = useState("SELECT * FROM orders LIMIT 1000");
+  const [query, setQuery] = useState("");
 
   function submitSql(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -487,7 +454,11 @@ function DataSourcesView({
         <div className="form-grid">
           <label>
             Source Name
-            <input value={sourceName} onChange={(event) => setSourceName(event.target.value)} />
+            <input
+              value={sourceName}
+              onChange={(event) => setSourceName(event.target.value)}
+              placeholder="Optional source name"
+            />
           </label>
           <label>
             Connection URI
@@ -504,7 +475,12 @@ function DataSourcesView({
             Query (SELECT only)
             <small>Limits apply to prevent full table scans</small>
           </span>
-          <textarea value={query} onChange={(event) => setQuery(event.target.value)} required />
+          <textarea
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="SELECT * FROM your_table LIMIT 1000"
+            required
+          />
         </label>
         <div className="form-actions">
           <button className="primary-button" disabled={busy === "sql"}>
@@ -518,34 +494,41 @@ function DataSourcesView({
         <PanelHeader
           icon={<RefreshCw size={21} />}
           title="Ingestion Status"
-          trailing={<span className="ghost-link">View All Sources</span>}
         />
-        <StatusItem
-          icon={classifyFile(dataset?.source_name ?? "Q4_Revenue_Data.csv")}
-          title={dataset?.source_name ?? "Q4_Revenue_Data.csv"}
-          meta={dataset ? `${formatNumber(dataset.row_count)} rows` : "45.2 MB • 1.2M Rows"}
-          status={dataset ? "READY" : "READY"}
-        />
-        <StatusItem
-          icon={<Database size={18} />}
-          title="Prod_User_Activity_SQL"
-          meta="Fetching records..."
-          status="PROCESSING"
-          progress
-        />
-        <StatusItem
-          icon={<AlertTriangle size={18} />}
-          title="legacy_export_2022.xls"
-          meta="ERR: UNSUPPORTED_FILE_TYPE"
-          status="FAILED"
-          errorText="The provided Excel file uses an outdated format. Convert to .xlsx or .csv and try again."
-        />
-        <StatusItem
-          icon={<FileJson size={18} />}
-          title="config_schema_v2.json"
-          meta="12 KB"
-          status="READY"
-        />
+        {busy === "upload" && (
+          <StatusItem
+            icon={<UploadCloud size={18} />}
+            title="Uploaded file"
+            meta="Profiling dataset through API..."
+            status="PROCESSING"
+            progress
+          />
+        )}
+        {busy === "sql" && (
+          <StatusItem
+            icon={<Database size={18} />}
+            title="SQL source"
+            meta="Loading records through API..."
+            status="PROCESSING"
+            progress
+          />
+        )}
+        {dataset ? (
+          <StatusItem
+            icon={classifyFile(dataset.source_name)}
+            title={dataset.source_name}
+            meta={`${formatNumber(dataset.row_count)} rows • ${formatNumber(
+              dataset.column_count,
+            )} columns • ${dataset.source_type.toUpperCase()}`}
+            status="READY"
+          />
+        ) : (
+          <div className="empty-source-state">
+            <Database size={24} />
+            <strong>No connected data sources</strong>
+            <p>Upload a file or connect SQL to populate this panel from the API.</p>
+          </div>
+        )}
       </aside>
     </section>
   );
@@ -684,11 +667,13 @@ function PreviewTable({ preview }: { preview: DatasetPreview }) {
 function AskAgentView({
   busy,
   dataset,
+  analysis,
   onAsk,
   onNeedDataset,
 }: {
   busy: string | null;
   dataset: DatasetInfo | null;
+  analysis: AnalysisResponse | null;
   onAsk: (question: string) => void;
   onNeedDataset: () => void;
 }) {
@@ -707,19 +692,16 @@ function AskAgentView({
   return (
     <section className="ask-layout">
       <DatasetContext dataset={dataset} />
-      <div className="agent-intro">
-        <div className="agent-icon"><Bot size={34} /></div>
-        <h2>How can I help you analyze this data?</h2>
-        <p>
-          Ask a question in plain English. I can generate SQL, create charts, run
-          statistical models, or summarize key findings from the {dataset.source_name} dataset.
-        </p>
-        <div className="question-chips">
-          {demoQuestions.map((item) => (
-            <button key={item} onClick={() => setQuestion(item)}>{item}</button>
-          ))}
+      {!analysis && (
+        <div className="agent-intro">
+          <div className="agent-icon"><Bot size={34} /></div>
+          <h2>How can I help you analyze this data?</h2>
+          <p>
+            Ask a question in plain English. The response will be generated from the
+            active dataset through the backend API.
+          </p>
         </div>
-      </div>
+      )}
       <form className="agent-composer" onSubmit={submit}>
         <textarea
           value={question}
@@ -727,16 +709,14 @@ function AskAgentView({
           placeholder="Ask a question about the dataset... (e.g., 'Show me revenue by region for last month')"
         />
         <div className="composer-footer">
-          <div>
-            <button type="button" className="icon-button"><UploadCloud size={19} /></button>
-            <button type="button" className="icon-button"><SlidersHorizontal size={19} /></button>
-          </div>
+          <span className="composer-context">{dataset.source_name}</span>
           <button className="primary-button" disabled={busy === "analysis" || !question.trim()}>
             {busy === "analysis" ? <Loader2 className="spin" size={17} /> : <Send size={17} />}
             Ask Agent
           </button>
         </div>
       </form>
+      {analysis && <ResultView analysis={analysis} onAsk={onAsk} />}
       <p className="fine-print">AI-generated analysis may be inaccurate. Verify critical business insights.</p>
     </section>
   );
@@ -832,7 +812,10 @@ function ResultView({
         <div className="agent-small"><Bot size={24} /></div>
         <div>
           <h2>{analysis.question}</h2>
-          <p><Table2 size={16} /> Dataset {analysis.dataset_id.slice(0, 8)} <span /> Just now</p>
+          <p>
+            <Table2 size={16} /> Dataset {analysis.dataset_id.slice(0, 8)}
+            <span /> {new Date(analysis.created_at).toLocaleString()}
+          </p>
         </div>
       </section>
       <div className="result-grid">

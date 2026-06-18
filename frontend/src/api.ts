@@ -70,14 +70,22 @@ export class AutodataApi {
   }
 
   ingestSql(connectionUri: string, query: string, sourceName: string) {
+    const payload: {
+      connection_uri: string;
+      query: string;
+      source_name?: string;
+    } = {
+      connection_uri: connectionUri,
+      query,
+    };
+    if (sourceName.trim()) {
+      payload.source_name = sourceName.trim();
+    }
+
     return this.request<DatasetInfo>("/datasets/sql", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        connection_uri: connectionUri,
-        query,
-        source_name: sourceName || "sql_dataset",
-      }),
+      body: JSON.stringify(payload),
     });
   }
 
