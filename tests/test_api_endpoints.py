@@ -225,4 +225,3 @@ def test_export_endpoint_returns_records_in_chronological_order(
     assert first["result_rows"] == [{"category": "A", "sales": 150}]
     assert first["chart_spec"]["title"] == "Sales by Category"
     assert first["narrative"]["key_finding"] == "Category A leads sales."
-
