@@ -17,6 +17,31 @@ def test_health_endpoint_returns_configured_model():
     assert response.json()["model"] == "qwen3-coder:480b"
 
 
+def test_cors_allows_configured_frontend_origin():
+    client = TestClient(create_app())
+    response = client.options(
+        "/api/v1/health",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers.get("access-control-allow-origin") == "http://localhost:5173"
+
+
+def test_cors_rejects_unlisted_origin():
+    client = TestClient(create_app())
+    response = client.get(
+        "/api/v1/health",
+        headers={"Origin": "http://evil.example"},
+    )
+
+    assert response.status_code == 200
+    assert "access-control-allow-origin" not in response.headers
+
+
 def test_ollama_client_fails_gracefully_without_key(tmp_path):
     settings = Settings(
         storage_dir=tmp_path / "runtime",

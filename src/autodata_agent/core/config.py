@@ -3,8 +3,15 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+DEFAULT_CORS_ORIGINS = (
+    "http://localhost:5173",
+    "http://localhost:8501",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:8501",
+)
 
 
 class Settings(BaseSettings):
@@ -30,6 +37,16 @@ class Settings(BaseSettings):
     max_repair_attempts: int = Field(default=2, ge=0, le=5)
     max_upload_bytes: int = 50 * 1024 * 1024
     max_preview_rows: int = 50
+    cors_origins: list[str] = Field(default_factory=lambda: list(DEFAULT_CORS_ORIGINS))
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, value: object) -> list[str]:
+        if value is None or value == "":
+            return []
+        if isinstance(value, str):
+            return [origin.strip() for origin in value.split(",") if origin.strip()]
+        return value  # type: ignore[return-value]
 
     def ensure_dirs(self) -> None:
         self.storage_dir.mkdir(parents=True, exist_ok=True)
