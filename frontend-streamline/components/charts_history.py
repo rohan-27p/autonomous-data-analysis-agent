@@ -4,7 +4,6 @@ from typing import Any
 
 import plotly.graph_objects as go
 import streamlit as st
-
 from api_client import ApiError, AutodataApiClient
 
 
@@ -60,7 +59,11 @@ def _render_history_item(record: dict[str, Any], index: int) -> None:
 
         action_cols = st.columns(2)
         with action_cols[0]:
-            if st.button("View chart", key=f"view_chart_{record['record_id']}", use_container_width=True):
+            if st.button(
+                "View chart",
+                key=f"view_chart_{record['record_id']}",
+                use_container_width=True,
+            ):
                 st.session_state["selected_analysis"] = response
                 st.rerun()
         with action_cols[1]:
