@@ -1,6 +1,7 @@
 .venv/
 node_modules/
 frontend/dist/
+.hf-deploy/
 .claude/
 .vscode/
 __pycache__/

@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Annotated
 
 from pydantic import Field, SecretStr, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 DEFAULT_CORS_ORIGINS = (
     "http://localhost:5173",
@@ -37,7 +38,9 @@ class Settings(BaseSettings):
     max_repair_attempts: int = Field(default=2, ge=0, le=5)
     max_upload_bytes: int = 50 * 1024 * 1024
     max_preview_rows: int = 50
-    cors_origins: list[str] = Field(default_factory=lambda: list(DEFAULT_CORS_ORIGINS))
+    cors_origins: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: list(DEFAULT_CORS_ORIGINS)
+    )
 
     @field_validator("cors_origins", mode="before")
     @classmethod
