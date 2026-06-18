@@ -48,3 +48,25 @@ def test_api_error_is_raised_for_structured_backend_failure(monkeypatch):
 
     assert exc.value.code == "empty_upload"
     assert exc.value.status_code == 400
+
+
+def test_export_session_requests_export_endpoint(monkeypatch):
+    captured: dict[str, str] = {}
+
+    def fake_request(method, url, **kwargs):
+        captured["method"] = method
+        captured["url"] = url
+        return httpx.Response(
+            200,
+            json={"session_id": "abc123", "exported_at": "2026-06-18T00:00:00Z", "analyses": []},
+            request=httpx.Request(method, url),
+        )
+
+    monkeypatch.setattr(httpx, "request", fake_request)
+
+    payload = AutodataApiClient("http://127.0.0.1:8000").export_session("abc123")
+
+    assert captured["method"] == "GET"
+    assert captured["url"] == "http://127.0.0.1:8000/api/v1/sessions/abc123/export"
+    assert payload["session_id"] == "abc123"
+    assert payload["analyses"] == []

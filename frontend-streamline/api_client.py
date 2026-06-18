@@ -135,3 +135,6 @@ class AutodataApiClient:
 
     def session_history(self, session_id: str) -> list[dict[str, Any]]:
         return self._request("GET", f"/sessions/{session_id}/history")
+
+    def export_session(self, session_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/sessions/{session_id}/export")
