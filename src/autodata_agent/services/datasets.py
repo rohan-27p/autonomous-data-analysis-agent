@@ -119,6 +119,8 @@ class DatasetStore:
             dataset_id=dataset_id,
             columns=[str(col) for col in df.columns],
             rows=rows,
+            row_count=len(stored.dataframe),
+            returned_rows=len(rows),
         )
 
     def _store(
