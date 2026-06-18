@@ -14,6 +14,8 @@ from autodata_agent.core.config import Settings
 from autodata_agent.core.schemas import (
     AnalysisRequest,
     AnalysisResponse,
+    ChartRenderRequest,
+    ChartRenderResponse,
     DatasetInfo,
     DatasetPreview,
     DatasetProfile,
@@ -22,6 +24,7 @@ from autodata_agent.core.schemas import (
     SQLIngestRequest,
 )
 from autodata_agent.services.analysis import AnalysisService
+from autodata_agent.services.charts import render_chart_figure
 from autodata_agent.services.datasets import DatasetStore
 from autodata_agent.storage.session_store import SessionStore
 
@@ -79,6 +82,16 @@ def analyze(
     service: AnalysisServiceDep,
 ) -> AnalysisResponse:
     return service.analyze(request)
+
+
+@router.post("/charts/render", response_model=ChartRenderResponse)
+def render_chart(request: ChartRenderRequest) -> ChartRenderResponse:
+    figure = render_chart_figure(request.chart_spec, request.result_rows)
+    return ChartRenderResponse(
+        chart_spec=request.chart_spec,
+        figure=figure,
+        caption=request.chart_spec.caption,
+    )
 
 
 @router.get("/sessions/{session_id}/history", response_model=list[SessionRecord])
