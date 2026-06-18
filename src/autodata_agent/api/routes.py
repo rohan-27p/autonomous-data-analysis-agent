@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, Depends, File, Query, UploadFile
 
 from autodata_agent.api.dependencies import (
     get_analysis_service,
@@ -15,6 +15,7 @@ from autodata_agent.core.schemas import (
     AnalysisRequest,
     AnalysisResponse,
     DatasetInfo,
+    DatasetPreview,
     DatasetProfile,
     HealthStatus,
     SessionRecord,
@@ -61,6 +62,15 @@ def get_profile(
     datasets: DatasetStoreDep,
 ) -> DatasetProfile:
     return datasets.get(dataset_id).profile
+
+
+@router.get("/datasets/{dataset_id}/preview", response_model=DatasetPreview)
+def get_preview(
+    dataset_id: str,
+    datasets: DatasetStoreDep,
+    limit: int = Query(20, ge=1, le=1000),
+) -> DatasetPreview:
+    return datasets.preview(dataset_id, limit)
 
 
 @router.post("/analysis", response_model=AnalysisResponse)
