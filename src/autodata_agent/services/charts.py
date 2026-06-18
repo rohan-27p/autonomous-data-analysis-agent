@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import pandas as pd
@@ -48,10 +49,7 @@ def render_chart_figure(chart_spec: ChartSpec, result_rows: list[dict[str, Any]]
             yaxis_title=chart_spec.y,
         )
 
-    payload = figure.to_plotly_json()
-    if isinstance(payload, dict):
-        return payload
-    return dict(payload)
+    return json.loads(figure.to_json())
 
 
 def _require_columns(

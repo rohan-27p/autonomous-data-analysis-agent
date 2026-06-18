@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import httpx
 import streamlit as st
-
 from api_client import ApiError, AutodataApiClient
 from components.analysis import render_analysis
 from components.charts_history import render_charts_history
