@@ -4,6 +4,7 @@ import httpx
 import streamlit as st
 
 from api_client import ApiError, AutodataApiClient
+from components.analysis import render_analysis
 from components.upload_profile import render_upload_profile
 
 DEFAULT_API_URL = "http://127.0.0.1:8000"
@@ -58,6 +59,11 @@ with st.sidebar:
         st.caption(dataset_info.get("source_name", "Unknown source"))
         st.code(st.session_state["dataset_id"], language=None)
 
+    if st.session_state.get("session_id"):
+        st.divider()
+        st.markdown("**Analysis session**")
+        st.code(st.session_state["session_id"], language=None)
+
 if "backend_health" not in st.session_state:
     st.session_state["backend_health"] = check_backend_health(client)
 
@@ -80,10 +86,10 @@ render_upload_profile(client)
 
 st.divider()
 
-analysis_col, history_col = st.columns(2)
-with analysis_col:
-    st.subheader("2. Ask Questions")
-    st.info("Analysis workflow UI will be added in the next commit.")
-with history_col:
-    st.subheader("3. Charts & History")
-    st.info("Chart rendering and session history UI will be added in the next commit.")
+st.subheader("2. Ask Questions")
+render_analysis(client)
+
+st.divider()
+
+st.subheader("3. Charts & History")
+st.info("Chart rendering and session history UI will be added in the next commit.")
