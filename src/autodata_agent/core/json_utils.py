@@ -19,15 +19,14 @@ def extract_json_object(text: str) -> dict[str, Any]:
         value = json.loads(stripped)
     except json.JSONDecodeError:
         start = stripped.find("{")
-        end = stripped.rfind("}")
-        if start == -1 or end == -1 or end <= start:
+        if start == -1:
             raise ValidationAppError(
                 "invalid_llm_json",
                 "The model did not return a JSON object.",
                 details={"response_preview": stripped[:500]},
             ) from None
         try:
-            value = json.loads(stripped[start : end + 1])
+            value, _ = json.JSONDecoder().raw_decode(stripped[start:])
         except json.JSONDecodeError as exc:
             raise ValidationAppError(
                 "invalid_llm_json",
@@ -38,4 +37,3 @@ def extract_json_object(text: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ValidationAppError("invalid_llm_json", "The model response JSON must be an object.")
     return value
-
