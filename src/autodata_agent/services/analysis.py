@@ -170,8 +170,22 @@ class AnalysisService:
             {"question": question, "dataset_profile": profile, "session_history": history},
             ensure_ascii=True,
         )
-        raw = self.llm.chat_json(system=GENERATION_SYSTEM_PROMPT, user=user)
-        return self._parse_generated(raw)
+        last_error: ValidationAppError | None = None
+        for attempt in range(2):
+            raw = self.llm.chat_json(system=GENERATION_SYSTEM_PROMPT, user=user)
+            try:
+                return self._parse_generated(raw)
+            except ValidationAppError as exc:
+                last_error = exc
+                user = self._json_retry_prompt(
+                    original_user=user,
+                    bad_response=raw,
+                    error=exc,
+                    attempt=attempt + 1,
+                )
+        if last_error is not None:
+            raise last_error
+        raise ValidationAppError("invalid_generated_analysis", "The model returned invalid output.")
 
     def _repair_code(
         self,
@@ -296,3 +310,30 @@ class AnalysisService:
             "result_columns": response.execution.result_columns,
             "sample_rows": response.execution.result_rows[:5],
         }
+
+    def _json_retry_prompt(
+        self,
+        *,
+        original_user: str,
+        bad_response: str,
+        error: ValidationAppError,
+        attempt: int,
+    ) -> str:
+        return json.dumps(
+            {
+                "instruction": (
+                    "Your previous response was rejected. Return exactly one valid JSON object "
+                    "matching the requested schema. Do not include markdown, comments, prose, "
+                    "multiple JSON objects, or trailing text."
+                ),
+                "attempt": attempt,
+                "validation_error": {
+                    "code": error.code,
+                    "message": error.message,
+                    "details": error.details,
+                },
+                "previous_response_preview": bad_response[:1000],
+                "original_request": json.loads(original_user),
+            },
+            ensure_ascii=True,
+        )

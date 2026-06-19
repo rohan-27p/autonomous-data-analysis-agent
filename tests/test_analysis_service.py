@@ -175,6 +175,43 @@ class FakeCompactOllamaShapeLLM:
         )
 
 
+class FakeMalformedThenValidLLM:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def chat_json(self, *, system: str, user: str) -> str:
+        self.calls += 1
+        if "business findings" in system:
+            return json.dumps(
+                {
+                    "key_finding": "Category A generated the most sales.",
+                    "business_meaning": "Category A should be inspected further.",
+                    "limitations": ["Small test dataset."],
+                    "follow_up_questions": ["Which region drives Category A sales?"],
+                }
+            )
+        if self.calls == 1:
+            return '{"plan": {"operation": "aggregation",'
+        return json.dumps(
+            {
+                "plan": {
+                    "operation": "aggregation",
+                    "objective": "Rank categories by sales.",
+                    "required_columns": ["category", "sales"],
+                    "assumptions": [],
+                    "chart_type": "bar",
+                },
+                "code": "\n".join(
+                    [
+                        'result_df = df.groupby("category", as_index=False)["sales"].sum()',
+                        'chart_spec = {"chart_type": "bar", "title": "Sales",',
+                        '"x": "category", "y": "sales", "caption": "Sales by category."}',
+                    ]
+                ),
+            }
+        )
+
+
 def test_analysis_service_repairs_failed_generated_code(tmp_path):
     datasets = DatasetStore(tmp_path / "uploads", max_upload_bytes=5_000_000)
     info = datasets.put_file(
@@ -261,3 +298,24 @@ def test_analysis_service_normalizes_compact_ollama_shape(tmp_path):
     assert response.execution.result_rows[0]["category"] == "A"
     assert response.narrative.limitations == ["Only a preview was requested."]
     assert response.narrative.follow_up_questions == ["Which category has the highest sales?"]
+
+
+def test_analysis_service_retries_malformed_generation_json(tmp_path):
+    datasets = DatasetStore(tmp_path / "uploads", max_upload_bytes=5_000_000)
+    info = datasets.put_file("orders.csv", b"category,sales\nA,100\nB,10\n")
+    llm = FakeMalformedThenValidLLM()
+    service = AnalysisService(
+        datasets=datasets,
+        sessions=SessionStore(tmp_path / "sessions.sqlite3"),
+        llm=llm,
+        executor=CodeExecutor(timeout_seconds=5),
+        max_repair_attempts=2,
+    )
+
+    response = service.analyze(
+        AnalysisRequest(dataset_id=info.dataset_id, question="Rank categories by sales")
+    )
+
+    assert llm.calls == 3
+    assert response.execution.success is True
+    assert response.execution.result_rows[0]["category"] == "A"
