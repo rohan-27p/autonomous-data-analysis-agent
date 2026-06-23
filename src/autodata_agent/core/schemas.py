@@ -73,6 +73,12 @@ class AnalysisOperation(StrEnum):
     ANOMALY = "anomaly_detection"
 
 
+class ResponseKind(StrEnum):
+    ANSWER = "answer"
+    ANALYSIS = "analysis"
+    CONVERSATION = "conversation"
+
+
 class AnalysisPlan(BaseModel):
     operation: AnalysisOperation
     objective: str
@@ -131,6 +137,7 @@ class AnalysisResponse(BaseModel):
     session_id: str
     dataset_id: str
     question: str
+    response_kind: ResponseKind = ResponseKind.ANALYSIS
     plan: AnalysisPlan
     generated_code: str
     execution: ExecutionResult

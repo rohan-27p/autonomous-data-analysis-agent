@@ -6,6 +6,7 @@ import {
   ChevronRight,
   Cloud,
   Code2,
+  Copy,
   Database,
   Download,
   FileJson,
@@ -26,7 +27,7 @@ import {
   UserCircle,
   X,
 } from "lucide-react";
-import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
+import { ChangeEvent, DragEvent, FormEvent, useEffect, useRef, useState } from "react";
 
 import { AutodataApi } from "./api";
 import {
@@ -63,6 +64,105 @@ function formatNumber(value: unknown) {
 
 function formatPercent(value: number) {
   return `${(value * 100).toFixed(1)}%`;
+}
+
+function formatCell(value: unknown) {
+  return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2})?/;
+
+function looksLikeDate(value: unknown): value is string {
+  return typeof value === "string" && ISO_DATE_RE.test(value);
+}
+
+// Smart cell rendering: dates as dates, numbers as numbers, everything else as text.
+function formatDisplay(value: unknown) {
+  if (looksLikeDate(value)) {
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) {
+      const hasMeaningfulTime = /\d{2}:\d{2}/.test(value) && !/T00:00:00/.test(value);
+      return hasMeaningfulTime ? date.toLocaleString() : date.toLocaleDateString();
+    }
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value);
+  }
+  return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+// Compact label for chart axes / ticks (short date or compact number).
+function formatAxisLabel(value: unknown) {
+  if (looksLikeDate(value)) {
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) {
+      return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    }
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(value);
+  }
+  const text = String(value ?? "");
+  return text.length > 12 ? `${text.slice(0, 11)}…` : text;
+}
+
+function formatCompact(value: number) {
+  return new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(value);
+}
+
+function evidenceColumns(rows: Record<string, unknown>[]) {
+  const ordered = Array.from(new Set(rows.flatMap((row) => Object.keys(row))));
+  return ordered
+    .filter((column) => rows.some((row) => formatCell(row[column]).length > 0))
+    .slice(0, 6);
+}
+
+function markdownTable(rows: Record<string, unknown>[]) {
+  const columns = evidenceColumns(rows);
+  if (!columns.length) return "";
+  const escapeCell = (value: unknown) => formatDisplay(value).replace(/\|/g, "\\|");
+  return [
+    `| ${columns.join(" | ")} |`,
+    `| ${columns.map(() => "---").join(" | ")} |`,
+    ...rows.map((row) => `| ${columns.map((column) => escapeCell(row[column])).join(" | ")} |`),
+  ].join("\n");
+}
+
+function exportAnalysisMarkdown(analysis: AnalysisResponse) {
+  const parts = [
+    `# ${analysis.response_kind === "analysis" ? "Analysis Result" : "Answer"}`,
+    "",
+    `**Question:** ${analysis.question}`,
+    `**Dataset:** ${analysis.dataset_id.slice(0, 8)}`,
+    "",
+    `## Key Finding`,
+    analysis.narrative.key_finding,
+    "",
+    `## Business Meaning`,
+    analysis.narrative.business_meaning,
+  ];
+  if (analysis.narrative.limitations.length) {
+    parts.push("", "## Limitations", ...analysis.narrative.limitations.map((item) => `- ${item}`));
+  }
+  if (analysis.execution.result_rows.length) {
+    parts.push("", `## Evidence (${analysis.execution.result_rows.length} rows)`, markdownTable(analysis.execution.result_rows));
+  }
+  if (analysis.narrative.follow_up_questions.length) {
+    parts.push("", "## Suggested Next Queries", ...analysis.narrative.follow_up_questions.map((item) => `- ${item}`));
+  }
+  return parts.join("\n");
+}
+
+function downloadTextFile(filename: string, content: string) {
+  const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 function summarizeColumn(column: ColumnProfile) {
@@ -321,6 +421,7 @@ export function App() {
               chatTurns={chatTurns}
               onAsk={handleAnalyze}
               onNeedDataset={() => setPage("sources")}
+              onNotice={setNotice}
             />
           )}
           {page === "history" && (
@@ -332,6 +433,7 @@ export function App() {
               onSelectAnalysis={setAnalysis}
               onRefreshHistory={() => loadHistory()}
               onExport={handleExport}
+              onNotice={setNotice}
             />
           )}
           {page === "settings" && (
@@ -480,6 +582,11 @@ function DataSourcesView({
   const [sourceName, setSourceName] = useState("");
   const [connectionUri, setConnectionUri] = useState("");
   const [query, setQuery] = useState("");
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const isUploadBusy = busy === "upload";
+  const dropzoneClassName = ["dropzone", isUploadBusy ? "loading" : "", isDraggingFile ? "drag-active" : ""]
+    .filter(Boolean)
+    .join(" ");
 
   function submitSql(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -492,6 +599,36 @@ function DataSourcesView({
     event.currentTarget.value = "";
   }
 
+  function handleDragOver(event: DragEvent<HTMLLabelElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (isUploadBusy) {
+      event.dataTransfer.dropEffect = "none";
+      return;
+    }
+    event.dataTransfer.dropEffect = "copy";
+    setIsDraggingFile(true);
+  }
+
+  function handleDragLeave(event: DragEvent<HTMLLabelElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+      setIsDraggingFile(false);
+    }
+  }
+
+  function handleDrop(event: DragEvent<HTMLLabelElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDraggingFile(false);
+
+    if (isUploadBusy) return;
+
+    const file = event.dataTransfer.files?.[0];
+    if (file) onUpload(file);
+  }
+
   return (
     <section className="page-grid sources-grid">
       <div className="page-copy">
@@ -502,15 +639,21 @@ function DataSourcesView({
 
       <div className="panel source-panel">
         <PanelHeader icon={<UploadCloud size={22} />} title="File Upload" />
-        <label className={`dropzone ${busy === "upload" ? "loading" : ""}`}>
+        <label
+          className={dropzoneClassName}
+          onDragEnter={handleDragOver}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
           <input
             type="file"
             accept=".csv,.xlsx,.xls,.json"
             onChange={upload}
-            disabled={busy === "upload"}
+            disabled={isUploadBusy}
           />
           <span className="drop-icon"><UploadCloud size={34} /></span>
-          <strong>{busy === "upload" ? "Uploading and profiling..." : "Drag and drop files here"}</strong>
+          <strong>{isUploadBusy ? "Uploading and profiling..." : "Drag and drop files here"}</strong>
           <small>Supported formats: CSV, Excel (.xlsx, .xls), JSON</small>
           <span className="secondary-button">Browse Files</span>
         </label>
@@ -722,7 +865,7 @@ function PreviewTable({ preview }: { preview: DatasetPreview }) {
         {preview.rows.slice(0, 8).map((row, index) => (
           <tr key={index}>
             {preview.columns.slice(0, 6).map((column) => (
-              <td key={column}>{formatNumber(row[column])}</td>
+              <td key={column}>{formatDisplay(row[column])}</td>
             ))}
           </tr>
         ))}
@@ -737,12 +880,14 @@ function AskAgentView({
   chatTurns,
   onAsk,
   onNeedDataset,
+  onNotice,
 }: {
   busy: string | null;
   dataset: DatasetInfo | null;
   chatTurns: ChatTurn[];
   onAsk: (question: string) => void;
   onNeedDataset: () => void;
+  onNotice: (notice: Notice) => void;
 }) {
   const [question, setQuestion] = useState("");
   const transcriptEndRef = useRef<HTMLDivElement | null>(null);
@@ -777,7 +922,7 @@ function AskAgentView({
       ) : (
         <div className="chat-transcript" aria-live="polite">
           {chatTurns.map((turn) => (
-            <ChatTurnView key={turn.id} turn={turn} onAsk={onAsk} />
+            <ChatTurnView key={turn.id} turn={turn} onAsk={onAsk} onNotice={onNotice} />
           ))}
           <div ref={transcriptEndRef} />
         </div>
@@ -801,7 +946,15 @@ function AskAgentView({
   );
 }
 
-function ChatTurnView({ turn, onAsk }: { turn: ChatTurn; onAsk: (question: string) => void }) {
+function ChatTurnView({
+  turn,
+  onAsk,
+  onNotice,
+}: {
+  turn: ChatTurn;
+  onAsk: (question: string) => void;
+  onNotice: (notice: Notice) => void;
+}) {
   return (
     <article className="chat-turn">
       <div className="chat-message user-message">
@@ -828,7 +981,7 @@ function ChatTurnView({ turn, onAsk }: { turn: ChatTurn; onAsk: (question: strin
             </div>
           )}
           {turn.status === "complete" && turn.analysis && (
-            <ResultView analysis={turn.analysis} onAsk={onAsk} mode="chat" />
+            <ResultView analysis={turn.analysis} onAsk={onAsk} onNotice={onNotice} mode="chat" />
           )}
         </div>
       </div>
@@ -863,6 +1016,7 @@ function ResultHistoryView({
   onRefreshHistory,
   onSelectAnalysis,
   onExport,
+  onNotice,
 }: {
   analysis: AnalysisResponse | null;
   history: SessionRecord[];
@@ -871,6 +1025,7 @@ function ResultHistoryView({
   onRefreshHistory: () => void;
   onSelectAnalysis: (analysis: AnalysisResponse) => void;
   onExport: () => void;
+  onNotice: (notice: Notice) => void;
 }) {
   const activeAnalysis = analysis ?? history[0]?.response ?? null;
 
@@ -886,7 +1041,7 @@ function ResultHistoryView({
 
   return (
     <section className="result-layout">
-      <ResultView analysis={activeAnalysis} onAsk={onAsk} />
+      <ResultView analysis={activeAnalysis} onAsk={onAsk} onNotice={onNotice} />
       <aside className="panel history-panel">
         <PanelHeader
           icon={<History size={21} />}
@@ -929,58 +1084,112 @@ function ResultHistoryView({
 function ResultView({
   analysis,
   onAsk,
+  onNotice,
   mode = "standalone",
 }: {
   analysis: AnalysisResponse;
   onAsk: (question: string) => void;
+  onNotice: (notice: Notice) => void;
   mode?: "standalone" | "chat";
 }) {
   const rows = analysis.execution.result_rows;
   const chartSpec = analysis.execution.chart_spec;
+  const isAnswerStyle = analysis.response_kind !== "analysis";
+  const showChart = chartSpec && chartSpec.chart_type !== "table" && rows.length > 0;
+  const exportedMarkdown = exportAnalysisMarkdown(analysis);
+
+  async function copyResult() {
+    try {
+      await navigator.clipboard.writeText(exportedMarkdown);
+      onNotice({ type: "success", title: "Result copied", body: "Markdown is ready to paste or send." });
+    } catch {
+      onNotice({ type: "error", title: "Copy failed", body: "Use Download instead." });
+    }
+  }
+
+  function downloadResult() {
+    downloadTextFile(`analysis-${analysis.dataset_id.slice(0, 8)}.md`, exportedMarkdown);
+    onNotice({ type: "success", title: "Result exported", body: "Downloaded a Markdown report." });
+  }
 
   return (
-    <div className={`result-view ${mode === "chat" ? "chat-result" : ""}`}>
+    <div
+      className={`result-view ${mode === "chat" ? "chat-result" : ""} ${
+        isAnswerStyle ? "answer-result" : ""
+      }`}
+    >
       <section className="result-question">
         <div className="agent-small"><Bot size={24} /></div>
         <div>
-          <h2>{mode === "chat" ? "Analysis result" : analysis.question}</h2>
+          <h2>{analysis.response_kind === "analysis" ? "Analysis result" : "Answer"}</h2>
           <p>
             <Table2 size={16} /> Dataset {analysis.dataset_id.slice(0, 8)}
             <span /> {new Date(analysis.created_at).toLocaleString()}
           </p>
         </div>
+        <div className="result-actions">
+          <button className="icon-button" onClick={copyResult} title="Copy result as Markdown">
+            <Copy size={17} />
+          </button>
+          <button className="icon-button" onClick={downloadResult} title="Download result as Markdown">
+            <Download size={17} />
+          </button>
+        </div>
       </section>
-      <div className="result-grid">
-        <div className="result-left">
-          <div className="panel">
-            <PanelHeader icon={<ListChecks size={20} />} title="Analysis Plan" />
-            <ul className="check-list">
-              <li>{analysis.plan.objective}</li>
-              <li>Operation: {analysis.plan.operation.replace(/_/g, " ")}</li>
-              <li>Required columns: {analysis.plan.required_columns.join(", ") || "Auto-detected"}</li>
-              <li>Chart type: {analysis.plan.chart_type}</li>
-            </ul>
-          </div>
-          <CodePanel code={analysis.generated_code} attempts={analysis.execution.attempts} />
-        </div>
-        <div className="result-right">
+      {isAnswerStyle ? (
+        <div className="answer-stack">
           <NarrativePanel analysis={analysis} />
-          <div className="two-col result-cards">
-            <DataTable rows={rows} />
-            <ChartPanel chartSpec={chartSpec} rows={rows} />
+          {rows.length > 0 && <DataTable rows={rows} title="Evidence" />}
+          {showChart && <ChartPanel chartSpec={chartSpec} rows={rows} />}
+          <FollowUps questions={analysis.narrative.follow_up_questions} onAsk={onAsk} />
+          <AnalysisDetails analysis={analysis} />
+        </div>
+      ) : (
+        <div className="result-grid">
+          <div className="result-left">
+            <AnalysisDetails analysis={analysis} defaultOpen />
           </div>
-          <div className="followups">
-            <span>Suggested Follow-ups</span>
-            {analysis.narrative.follow_up_questions.map((question) => (
-              <button key={question} onClick={() => onAsk(question)}>
-                <LineChart size={16} />
-                {question}
-              </button>
-            ))}
+          <div className="result-right">
+            <NarrativePanel analysis={analysis} />
+            <div className={showChart ? "two-col result-cards" : "result-cards"}>
+              <DataTable rows={rows} />
+              {showChart && <ChartPanel chartSpec={chartSpec} rows={rows} />}
+            </div>
+            <FollowUps questions={analysis.narrative.follow_up_questions} onAsk={onAsk} />
           </div>
         </div>
-      </div>
+      )}
     </div>
+  );
+}
+
+function AnalysisDetails({
+  analysis,
+  defaultOpen = false,
+}: {
+  analysis: AnalysisResponse;
+  defaultOpen?: boolean;
+}) {
+  return (
+    <details className="analysis-details" open={defaultOpen}>
+      <summary>
+        <ListChecks size={18} />
+        <span>Technical details</span>
+      </summary>
+      <div className="details-grid">
+        <div className="panel">
+          <PanelHeader icon={<ListChecks size={20} />} title="Plan" />
+          <ul className="check-list">
+            <li>{analysis.plan.objective}</li>
+            <li>Operation: {analysis.plan.operation.replace(/_/g, " ")}</li>
+            <li>Columns: {analysis.plan.required_columns.join(", ") || "Auto-detected"}</li>
+          </ul>
+        </div>
+        {analysis.generated_code && (
+          <CodePanel code={analysis.generated_code} attempts={analysis.execution.attempts} />
+        )}
+      </div>
+    </details>
   );
 }
 
@@ -993,6 +1202,27 @@ function CodePanel({ code, attempts }: { code: string; attempts: number }) {
       </header>
       <pre>{code}</pre>
     </section>
+  );
+}
+
+function FollowUps({
+  questions,
+  onAsk,
+}: {
+  questions: string[];
+  onAsk: (question: string) => void;
+}) {
+  if (!questions.length) return null;
+  return (
+    <div className="followups">
+      <span>Suggested Follow-ups</span>
+      {questions.map((question) => (
+        <button key={question} onClick={() => onAsk(question)}>
+          <LineChart size={16} />
+          {question}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -1018,11 +1248,18 @@ function NarrativePanel({ analysis }: { analysis: AnalysisResponse }) {
   );
 }
 
-function DataTable({ rows }: { rows: Record<string, unknown>[] }) {
-  const columns = Object.keys(rows[0] ?? {}).slice(0, 6);
+const MAX_TABLE_ROWS = 12;
+
+function DataTable({ rows, title = "Data Table" }: { rows: Record<string, unknown>[]; title?: string }) {
+  const columns = evidenceColumns(rows);
+  const visibleRows = rows.slice(0, MAX_TABLE_ROWS);
+  const hiddenCount = rows.length - visibleRows.length;
   return (
     <section className="panel data-card">
-      <PanelHeader icon={<Table2 size={20} />} title="Data Table" />
+      <PanelHeader
+        icon={<Table2 size={20} />}
+        title={rows.length ? `${title} (${formatNumber(rows.length)} rows)` : title}
+      />
       <div className="table-wrap compact">
         {columns.length ? (
           <table>
@@ -1030,9 +1267,9 @@ function DataTable({ rows }: { rows: Record<string, unknown>[] }) {
               <tr>{columns.map((column) => <th key={column}>{column}</th>)}</tr>
             </thead>
             <tbody>
-              {rows.slice(0, 8).map((row, index) => (
+              {visibleRows.map((row, index) => (
                 <tr key={index}>
-                  {columns.map((column) => <td key={column}>{formatNumber(row[column])}</td>)}
+                  {columns.map((column) => <td key={column}>{formatDisplay(row[column])}</td>)}
                 </tr>
               ))}
             </tbody>
@@ -1041,6 +1278,12 @@ function DataTable({ rows }: { rows: Record<string, unknown>[] }) {
           <p className="empty-line">No result rows returned.</p>
         )}
       </div>
+      {hiddenCount > 0 && (
+        <p className="table-more">
+          Showing first {formatNumber(visibleRows.length)} of {formatNumber(rows.length)} rows — the
+          chart and exported report include all rows.
+        </p>
+      )}
     </section>
   );
 }
@@ -1051,7 +1294,7 @@ function ChartPanel({ chartSpec, rows }: { chartSpec: ChartSpec | null; rows: Re
       <PanelHeader icon={<BarChart3 size={20} />} title="Visualization" />
       {chartSpec && rows.length ? (
         <>
-          <SimpleChart chartSpec={chartSpec} rows={rows} />
+          <AnalysisChart chartSpec={chartSpec} rows={rows} />
           <p className="chart-caption">{chartSpec.caption}</p>
         </>
       ) : (
@@ -1061,29 +1304,118 @@ function ChartPanel({ chartSpec, rows }: { chartSpec: ChartSpec | null; rows: Re
   );
 }
 
-function SimpleChart({ chartSpec, rows }: { chartSpec: ChartSpec; rows: Record<string, unknown>[] }) {
-  const xKey = chartSpec.x ?? Object.keys(rows[0] ?? {})[0];
-  const yKey = chartSpec.y ?? Object.keys(rows[0] ?? {}).find((key) => typeof rows[0]?.[key] === "number");
-  const values = rows
-    .slice(0, 8)
-    .map((row) => ({ label: String(row[xKey] ?? ""), value: Number(row[yKey ?? ""] ?? 0) }))
-    .filter((item) => Number.isFinite(item.value));
-  const maxValue = Math.max(...values.map((item) => item.value), 1);
+function AnalysisChart({ chartSpec, rows }: { chartSpec: ChartSpec; rows: Record<string, unknown>[] }) {
+  const sample = rows[0] ?? {};
+  const xKey = chartSpec.x ?? Object.keys(sample)[0] ?? "";
+  const yKey =
+    chartSpec.y ?? Object.keys(sample).find((key) => typeof sample[key] === "number") ?? "";
+  const kind = chartSpec.chart_type;
+  const asLine = kind === "line";
+  const asScatter = kind === "scatter";
+  const isSeries = asLine || asScatter;
+  const maxPoints = isSeries ? 60 : 16;
 
-  if (!values.length || chartSpec.chart_type === "table") {
-    return <p className="empty-line">Chart data is not numeric.</p>;
+  const points = rows
+    .map((row) => ({ label: formatAxisLabel(row[xKey]), value: Number(row[yKey]) }))
+    .filter((point) => Number.isFinite(point.value))
+    .slice(0, maxPoints);
+
+  if (!points.length || kind === "table" || kind === "heatmap") {
+    return <p className="empty-line">This result is best viewed as the table.</p>;
   }
 
+  const W = 720;
+  const H = 260;
+  const padL = 60;
+  const padR = 18;
+  const padT = 16;
+  const padB = 46;
+  const innerW = W - padL - padR;
+  const innerH = H - padT - padB;
+
+  const values = points.map((point) => point.value);
+  let yMax = Math.max(...values);
+  let yMin = Math.min(...values);
+  if (isSeries) {
+    const span = yMax - yMin;
+    const pad = span ? span * 0.1 : Math.abs(yMax) * 0.1 || 1;
+    yMax += pad;
+    yMin -= pad;
+  } else {
+    yMin = Math.min(0, yMin);
+  }
+  if (yMax === yMin) yMax = yMin + 1;
+
+  const xAt = (i: number) =>
+    padL + (points.length === 1 ? innerW / 2 : (i / (points.length - 1)) * innerW);
+  const yAt = (value: number) => padT + innerH - ((value - yMin) / (yMax - yMin)) * innerH;
+
+  const yTicks = [yMax, (yMin + yMax) / 2, yMin];
+  const tickCount = Math.min(points.length, 6);
+  const tickIdx = Array.from({ length: tickCount }, (_, k) =>
+    tickCount <= 1 ? 0 : Math.round((k / (tickCount - 1)) * (points.length - 1)),
+  );
+  const barWidth = Math.max(4, (innerW / points.length) * 0.62);
+  const baseY = yAt(Math.max(0, yMin));
+
   return (
-    <div className={`simple-chart ${chartSpec.chart_type}`}>
-      <div className="bars">
-        {values.map((item, index) => (
-          <div className="bar-slot" key={`${item.label}-${index}`}>
-            <i style={{ height: `${Math.max((item.value / maxValue) * 100, 6)}%` }} />
-            <span>{item.label.slice(0, 8)}</span>
-          </div>
+    <div className="chart-figure">
+      <svg viewBox={`0 0 ${W} ${H}`} className={`chart-svg ${kind}`} role="img" preserveAspectRatio="xMidYMid meet">
+        {yTicks.map((tick, i) => (
+          <g key={`y-${i}`}>
+            <line x1={padL} y1={yAt(tick)} x2={W - padR} y2={yAt(tick)} className="chart-grid" />
+            <text x={padL - 10} y={yAt(tick) + 4} className="chart-axis-label" textAnchor="end">
+              {formatCompact(tick)}
+            </text>
+          </g>
         ))}
-      </div>
+        <line x1={padL} y1={baseY} x2={W - padR} y2={baseY} className="chart-axis" />
+
+        {isSeries ? (
+          <>
+            {asLine && (
+              <polyline
+                className="chart-line"
+                points={points.map((point, i) => `${xAt(i)},${yAt(point.value)}`).join(" ")}
+              />
+            )}
+            {points.map((point, i) => (
+              <circle key={i} cx={xAt(i)} cy={yAt(point.value)} r={asScatter ? 4 : 3} className="chart-dot">
+                <title>{`${point.label}: ${formatDisplay(point.value)}`}</title>
+              </circle>
+            ))}
+          </>
+        ) : (
+          points.map((point, i) => {
+            const top = yAt(point.value);
+            return (
+              <rect
+                key={i}
+                x={xAt(i) - barWidth / 2}
+                y={Math.min(top, baseY)}
+                width={barWidth}
+                height={Math.max(2, Math.abs(baseY - top))}
+                className="chart-bar"
+                rx={3}
+              >
+                <title>{`${point.label}: ${formatDisplay(point.value)}`}</title>
+              </rect>
+            );
+          })
+        )}
+
+        {tickIdx.map((idx) => (
+          <text
+            key={`x-${idx}`}
+            x={xAt(idx)}
+            y={H - padB + 24}
+            className="chart-axis-label"
+            textAnchor="middle"
+          >
+            {points[idx].label}
+          </text>
+        ))}
+      </svg>
     </div>
   );
 }

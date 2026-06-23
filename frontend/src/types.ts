@@ -92,6 +92,7 @@ export type AnalysisResponse = {
   session_id: string;
   dataset_id: string;
   question: string;
+  response_kind: "answer" | "analysis" | "conversation";
   plan: AnalysisPlan;
   generated_code: string;
   execution: ExecutionResult;
