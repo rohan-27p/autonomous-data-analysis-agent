@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     ollama_api_key: SecretStr | None = None
     ollama_model: str = "qwen3-coder:480b"
     ollama_think: str = "false"
-    ollama_num_predict: int = 1200
+    ollama_num_predict: int = 2048
 
     llm_timeout_seconds: float = 90
     execution_timeout_seconds: float = 12

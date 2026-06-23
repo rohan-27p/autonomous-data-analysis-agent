@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 
 import pandas as pd
+from openpyxl import Workbook
 
 from autodata_agent.core.schemas import DataSourceType
 from autodata_agent.services.datasets import DatasetStore
@@ -37,6 +38,91 @@ def test_excel_and_json_ingestion(tmp_path):
     assert excel_info.source_type == DataSourceType.EXCEL
     assert json_info.source_type == DataSourceType.JSON
     assert excel_info.profile.row_count == json_info.profile.row_count == 2
+    assert "sheet_name" in [column.name for column in excel_info.profile.columns]
+
+
+def test_excel_ingestion_includes_all_workbook_sheets(tmp_path):
+    store = DatasetStore(tmp_path, max_upload_bytes=5_000_000)
+    schedule_df = pd.DataFrame([{"day": "Monday", "class": "Database"}])
+    hld_df = pd.DataFrame(
+        [
+            {"Session Number": 1, "Session Title": "System Design 101"},
+            {"Session Number": 2, "Session Title": "Load Balancing and Consistent Hashing"},
+        ]
+    )
+
+    excel_buffer = io.BytesIO()
+    with pd.ExcelWriter(excel_buffer) as writer:
+        schedule_df.to_excel(writer, sheet_name="Weekly Schedule", index=False)
+        hld_df.to_excel(writer, sheet_name="High Level Design", index=False)
+
+    info = store.put_file("syllabus.xlsx", excel_buffer.getvalue())
+    stored = store.get(info.dataset_id)
+
+    assert info.row_count == 3
+    assert "sheet_name" in stored.dataframe.columns
+    assert set(stored.dataframe["sheet_name"]) == {"Weekly Schedule", "High Level Design"}
+    assert "System Design 101" in stored.dataframe["Session Title"].dropna().tolist()
+
+
+def test_excel_ingestion_normalizes_merged_timetable_sheet(tmp_path):
+    store = DatasetStore(tmp_path, max_upload_bytes=5_000_000)
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Weekly Schedule"
+    sheet.merge_cells("C1:D1")
+    sheet["C1"] = "Group A"
+    sheet["C2"] = "Monday"
+    sheet["D2"] = "Tuesday"
+    sheet["A3"] = "9:00 - 9:15 AM"
+    sheet["A4"] = "9:15 - 9:30 AM"
+    sheet["A5"] = "9:30 - 9:45 AM"
+    sheet.merge_cells("C3:C5")
+    sheet["C3"] = "High Level Design [Instructor]"
+    sheet["D3"] = "Lunch"
+    sheet.merge_cells("D4:D5")
+    sheet["D4"] = "Database Lab"
+
+    buffer = io.BytesIO()
+    workbook.save(buffer)
+
+    info = store.put_file("schedule.xlsx", buffer.getvalue())
+    stored = store.get(info.dataset_id)
+
+    assert list(stored.dataframe.columns) == [
+        "sheet_name",
+        "Group",
+        "Day",
+        "Start Time",
+        "End Time",
+        "Activity",
+    ]
+    assert stored.dataframe.to_dict(orient="records") == [
+        {
+            "sheet_name": "Weekly Schedule",
+            "Group": "Group A",
+            "Day": "Monday",
+            "Start Time": "9:00 AM",
+            "End Time": "9:45 AM",
+            "Activity": "High Level Design [Instructor]",
+        },
+        {
+            "sheet_name": "Weekly Schedule",
+            "Group": "Group A",
+            "Day": "Tuesday",
+            "Start Time": "9:00 AM",
+            "End Time": "9:15 AM",
+            "Activity": "Lunch",
+        },
+        {
+            "sheet_name": "Weekly Schedule",
+            "Group": "Group A",
+            "Day": "Tuesday",
+            "Start Time": "9:15 AM",
+            "End Time": "9:45 AM",
+            "Activity": "Database Lab",
+        },
+    ]
 
 
 def test_dataset_store_rehydrates_from_disk(tmp_path):
