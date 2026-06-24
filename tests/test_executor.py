@@ -62,3 +62,31 @@ chart_spec = {
     assert result.chart_spec is not None
     assert result.chart_spec.x is None
     assert result.chart_spec.y is None
+
+
+def test_executor_drops_fully_empty_result_rows():
+    df = pd.DataFrame(
+        [
+            {"session": 1, "title": "System Design 101"},
+            {"session": None, "title": ""},
+            {"session": 2, "title": "Caching"},
+        ]
+    )
+    code = """
+result_df = df
+chart_spec = {
+    "chart_type": "table",
+    "title": "Sessions",
+    "x": "session",
+    "y": "title",
+    "caption": "Sessions."
+}
+"""
+
+    result = CodeExecutor(timeout_seconds=5).execute(df, code)
+
+    assert result.success is True
+    assert result.result_rows == [
+        {"session": 1.0, "title": "System Design 101"},
+        {"session": 2.0, "title": "Caching"},
+    ]

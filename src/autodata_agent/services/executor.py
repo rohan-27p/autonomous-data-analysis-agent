@@ -106,7 +106,9 @@ try:
         "success": True,
         "result_columns": [str(column) for column in result_df.columns],
         "result_rows": json.loads(
-            result_df.where(pd.notnull(result_df), None).to_json(orient="records")
+            result_df.where(pd.notnull(result_df), None).to_json(
+                orient="records", date_format="iso"
+            )
         ),
         "chart_spec": chart_spec,
         "stdout": stdout.getvalue(),
@@ -168,10 +170,11 @@ class CodeExecutor:
             payload = json.loads(output_path.read_text(encoding="utf-8"))
             if payload.get("success"):
                 chart = ChartSpec.model_validate(payload["chart_spec"])
+                result_rows = self._drop_empty_result_rows(payload.get("result_rows", []))
                 return ExecutionResult(
                     success=True,
                     result_columns=payload.get("result_columns", []),
-                    result_rows=payload.get("result_rows", []),
+                    result_rows=result_rows,
                     chart_spec=chart,
                     stdout=payload.get("stdout", ""),
                 )
@@ -180,6 +183,21 @@ class CodeExecutor:
                 error=payload.get("error", "Unknown execution error."),
                 stdout=payload.get("stdout", ""),
             )
+
+    def _drop_empty_result_rows(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        cleaned: list[dict[str, Any]] = []
+        for row in rows:
+            if any(not self._is_empty_cell(value) for value in row.values()):
+                cleaned.append(row)
+        return cleaned
+
+    @staticmethod
+    def _is_empty_cell(value: Any) -> bool:
+        if value is None:
+            return True
+        if isinstance(value, str) and not value.strip():
+            return True
+        return False
 
     def _validate_code(self, code: str) -> None:
         lowered = code.lower()
